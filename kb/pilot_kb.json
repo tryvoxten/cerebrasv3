@@ -1,0 +1,684 @@
+{
+  "version": "pilot-memory-kb-v1",
+  "source_files": [
+    "/Users/admin/Downloads/VOXTEN/Service KB.xlsx"
+  ],
+  "generated_at": "2026-05-26T01:14:55Z",
+  "runtime_policy": {
+    "load_mode": "in_memory_at_startup_or_compile_time",
+    "live_call_network_lookup": false,
+    "latency_goal": "no KB network request during live turn"
+  },
+  "dealership": {
+    "name": "the dealership",
+    "timezone": "America/Toronto"
+  },
+  "service_entries": [
+    {
+      "id": "service-shuttle-service",
+      "title": "Shuttle Service",
+      "department": "service",
+      "category": "transportation",
+      "summary": "Local shuttle service for customers during service appointments",
+      "availability": "conditional",
+      "conditions": "Available for active service customers",
+      "limits": "Limited to 15 mile radius and driver availability",
+      "notes": "Not guaranteed during peak hours",
+      "keywords": [
+        "shuttle",
+        "ride",
+        "transport",
+        "pickup",
+        "dropoff"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-loaner-vehicle",
+      "title": "Loaner Vehicle",
+      "department": "service",
+      "category": "transportation",
+      "summary": "Temporary vehicle provided during longer repairs",
+      "availability": "conditional",
+      "conditions": "Requires advisor approval and qualifying repair",
+      "limits": "Limited inventory",
+      "notes": "Insurance and license required",
+      "keywords": [
+        "loaner",
+        "car",
+        "rental",
+        "replacement vehicle"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-after-hours-drop-off",
+      "title": "After Hours Drop-Off",
+      "department": "service",
+      "category": "convenience",
+      "summary": "Customers can drop off vehicles outside business hours",
+      "availability": "yes",
+      "conditions": "None",
+      "limits": "Key drop box only",
+      "notes": "Envelope must be filled out",
+      "keywords": [
+        "after hours",
+        "drop off",
+        "night",
+        "late",
+        "key box"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-after-hours-pickup",
+      "title": "After Hours Pickup",
+      "department": "service",
+      "category": "convenience",
+      "summary": "Vehicle pickup available after hours",
+      "availability": "conditional",
+      "conditions": "Must be pre-arranged with advisor",
+      "limits": "Access instructions required",
+      "notes": "Payment must be completed beforehand",
+      "keywords": [
+        "after hours",
+        "pickup",
+        "late",
+        "vehicle pickup"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-free-wi-fi",
+      "title": "Free Wi-Fi",
+      "department": "service",
+      "category": "waiting",
+      "summary": "Wi-Fi available in customer waiting area",
+      "availability": "yes",
+      "conditions": "None",
+      "limits": "None",
+      "notes": "Network details provided on-site",
+      "keywords": [
+        "wifi",
+        "internet",
+        "waiting room"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-customer-lounge",
+      "title": "Customer Lounge",
+      "department": "service",
+      "category": "waiting",
+      "summary": "Indoor waiting area with seating and workspace",
+      "availability": "yes",
+      "conditions": "None",
+      "limits": "Capacity may be limited",
+      "notes": "Shared space",
+      "keywords": [
+        "lounge",
+        "waiting area",
+        "seating"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-coffee-and-refreshments",
+      "title": "Coffee and Refreshments",
+      "department": "service",
+      "category": "waiting",
+      "summary": "Complimentary coffee and beverages available",
+      "availability": "yes",
+      "conditions": "None",
+      "limits": "While supplies last",
+      "notes": "Self-serve",
+      "keywords": [
+        "coffee",
+        "drinks",
+        "refreshments"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-kids-play-area",
+      "title": "Kids Play Area",
+      "department": "service",
+      "category": "waiting",
+      "summary": "Designated play space for children",
+      "availability": "conditional",
+      "conditions": "Available during business hours",
+      "limits": "May be closed for cleaning or safety",
+      "notes": "Supervision required",
+      "keywords": [
+        "kids area",
+        "children",
+        "play"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-workstations",
+      "title": "Workstations",
+      "department": "service",
+      "category": "waiting",
+      "summary": "Work desks available for customers while waiting",
+      "availability": "yes",
+      "conditions": "None",
+      "limits": "Limited seating",
+      "notes": "First come first serve",
+      "keywords": [
+        "workspace",
+        "desk",
+        "work area"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-digital-vehicle-inspection",
+      "title": "Digital Vehicle Inspection",
+      "department": "service",
+      "category": "service",
+      "summary": "Technicians provide digital inspection reports with photos",
+      "availability": "yes",
+      "conditions": "Included with most services",
+      "limits": "None",
+      "notes": "Sent via text or email",
+      "keywords": [
+        "inspection",
+        "digital report",
+        "photos"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-text-status-updates",
+      "title": "Text Status Updates",
+      "department": "service",
+      "category": "service",
+      "summary": "Customers receive service updates via text message",
+      "availability": "yes",
+      "conditions": "Requires valid phone number",
+      "limits": "None",
+      "notes": "Opt-in required",
+      "keywords": [
+        "text updates",
+        "status updates",
+        "notifications"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-online-payment",
+      "title": "Online Payment",
+      "department": "service",
+      "category": "service",
+      "summary": "Customers can pay invoices online",
+      "availability": "yes",
+      "conditions": "Available after service completion",
+      "limits": "None",
+      "notes": "Secure payment portal",
+      "keywords": [
+        "online payment",
+        "pay bill",
+        "invoice"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-express-service",
+      "title": "Express Service",
+      "department": "service",
+      "category": "service",
+      "summary": "Quick maintenance services without long wait times",
+      "availability": "conditional",
+      "conditions": "Applies to basic services only",
+      "limits": "First come first serve",
+      "notes": "May have limited hours",
+      "keywords": [
+        "express service",
+        "quick oil change",
+        "fast service"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-tire-storage",
+      "title": "Tire Storage",
+      "department": "service",
+      "category": "service",
+      "summary": "Seasonal tire storage for customers",
+      "availability": "conditional",
+      "conditions": "Available for registered customers",
+      "limits": "Storage capacity limits apply",
+      "notes": "Additional fees may apply",
+      "keywords": [
+        "tire storage",
+        "seasonal tires",
+        "storage"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-ev-service",
+      "title": "EV Service",
+      "department": "service",
+      "category": "capability",
+      "summary": "Service and maintenance for electric vehicles",
+      "availability": "yes",
+      "conditions": "Applies to supported EV models",
+      "limits": "None",
+      "notes": "Certified technicians required",
+      "keywords": [
+        "electric vehicle",
+        "ev",
+        "tesla",
+        "hybrid"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-diesel-service",
+      "title": "Diesel Service",
+      "department": "service",
+      "category": "capability",
+      "summary": "Service support for diesel vehicles",
+      "availability": "yes",
+      "conditions": "Applies to supported diesel engines",
+      "limits": "None",
+      "notes": "Specialized technicians",
+      "keywords": [
+        "diesel",
+        "truck service"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-fleet-service",
+      "title": "Fleet Service",
+      "department": "service",
+      "category": "capability",
+      "summary": "Maintenance and repair services for fleet vehicles",
+      "availability": "conditional",
+      "conditions": "Requires fleet account or agreement",
+      "limits": "Priority scheduling may apply",
+      "notes": "Contact advisor for setup",
+      "keywords": [
+        "fleet",
+        "commercial vehicles",
+        "business service"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-warranty-repairs",
+      "title": "Warranty Repairs",
+      "department": "service",
+      "category": "service",
+      "summary": "Repairs covered under manufacturer warranty",
+      "availability": "conditional",
+      "conditions": "Vehicle must qualify under warranty terms",
+      "limits": "None",
+      "notes": "Verification required",
+      "keywords": [
+        "warranty",
+        "covered repair"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-recall-service",
+      "title": "Recall Service",
+      "department": "service",
+      "category": "service",
+      "summary": "Manufacturer recall repairs performed at no cost",
+      "availability": "yes",
+      "conditions": "Must match active recall",
+      "limits": "None",
+      "notes": "Handled per manufacturer guidelines",
+      "keywords": [
+        "recall",
+        "manufacturer recall",
+        "free repair"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    },
+    {
+      "id": "service-valet-pickup-and-delivery",
+      "title": "Valet Pickup and Delivery",
+      "department": "service",
+      "category": "transportation",
+      "summary": "Vehicle pickup and return service for customers",
+      "availability": "conditional",
+      "conditions": "Available within service area",
+      "limits": "Distance and scheduling limits apply",
+      "notes": "May require additional fee",
+      "keywords": [
+        "valet",
+        "pickup",
+        "delivery",
+        "vehicle pickup"
+      ],
+      "capture_policy": "collect caller name, callback phone, vehicle, request, and preferred callback time; service team confirms details"
+    }
+  ],
+  "vehicle_lexicon": {
+    "years": [
+      "2000",
+      "2001",
+      "2002",
+      "2003",
+      "2004",
+      "2005",
+      "2006",
+      "2007",
+      "2008",
+      "2009",
+      "2010",
+      "2011",
+      "2012",
+      "2013",
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023",
+      "2024",
+      "2025",
+      "2026"
+    ],
+    "makes": [
+      "Hyundai"
+    ],
+    "models": [
+      "Ioniq 5",
+      "Tucson",
+      "Santa Fe",
+      "Elantra",
+      "Palisade",
+      "Kona",
+      "Sonata",
+      "Venue",
+      "Accent",
+      "Veloster",
+      "Genesis"
+    ],
+    "aliases": {
+      "ionic 5": "Ioniq 5",
+      "ioniq five": "Ioniq 5",
+      "santa fe hybrid": "Santa Fe hybrid",
+      "palisades": "Palisade"
+    },
+    "reject_generic": [
+      "car",
+      "my car",
+      "the car",
+      "vehicle",
+      "my vehicle",
+      "old car",
+      "new car",
+      "truck",
+      "suv",
+      "ev",
+      "hyundai"
+    ]
+  },
+  "confirmation_phrases": {
+    "yes": [
+      "yes",
+      "correct",
+      "yup",
+      "yep",
+      "yeah",
+      "right",
+      "that is right",
+      "that's right",
+      "all correct",
+      "that is mine",
+      "that's mine",
+      "yep that is mine",
+      "yup that is mine",
+      "looks right",
+      "sounds right",
+      "correct number"
+    ]
+  },
+  "affirmation_runtime": {
+    "labels": [
+      "none",
+      "yes",
+      "no",
+      "unclear"
+    ],
+    "yes": [
+      "yes",
+      "correct",
+      "yup",
+      "yep",
+      "yeah",
+      "right",
+      "that's right",
+      "that is right",
+      "all correct",
+      "that is mine",
+      "that's mine",
+      "yep that is mine",
+      "yup that is mine",
+      "looks right",
+      "sounds right",
+      "correct number",
+      "sounds good",
+      "that works",
+      "all good",
+      "perfect"
+    ],
+    "no": [
+      "no",
+      "nope",
+      "not right",
+      "not correct",
+      "incorrect",
+      "wrong",
+      "that's wrong",
+      "that is wrong",
+      "wrong number",
+      "not mine"
+    ],
+    "unclear": [
+      "maybe",
+      "not sure",
+      "can you repeat that",
+      "say that again"
+    ],
+    "prompt_rule": "Use a=yes only when the caller affirms or confirms the assistant's previous yes/no confirmation, like correct, that's right, yep, sounds good, that is mine. Use a=no for wrong, not correct, nope, wrong number, or not mine."
+  },
+  "faq_runtime": {
+    "labels": [
+      "none",
+      "recall_service",
+      "warranty_service",
+      "ev_battery_service",
+      "service_hours",
+      "parts_availability",
+      "parts_order_status",
+      "sales_inventory",
+      "financing",
+      "trade_in"
+    ],
+    "priority_rules": [
+      "trade_in beats sales_inventory",
+      "financing beats sales_inventory",
+      "ev_battery_service beats warranty_service",
+      "parts_order_status beats parts_availability"
+    ],
+    "entries": [
+      {
+        "id": "recall_service",
+        "description": "recall, manufacturer recall, open recall, recall notice",
+        "answer": "The service team can help review recall concerns and confirm next steps when they call back.",
+        "aliases": [
+          "recall",
+          "recall notice",
+          "open recall",
+          "manufacturer recall"
+        ]
+      },
+      {
+        "id": "warranty_service",
+        "description": "warranty, manufacturer warranty, warranty coverage",
+        "answer": "The service team can review warranty questions and confirm what applies when they call back.",
+        "aliases": [
+          "warranty",
+          "under warranty",
+          "manufacturer warranty",
+          "covered under warranty"
+        ]
+      },
+      {
+        "id": "ev_battery_service",
+        "description": "EV battery, high-voltage battery, electric car battery warning",
+        "answer": "The service team can review EV battery concerns and confirm next steps when they call back.",
+        "aliases": [
+          "ev battery",
+          "electric car battery",
+          "high-voltage battery",
+          "high voltage battery",
+          "ioniq battery",
+          "electric battery"
+        ]
+      },
+      {
+        "id": "service_hours",
+        "description": "service hours, when service opens or closes, service department schedule",
+        "answer": "The team can confirm current service hours when they call back.",
+        "aliases": [
+          "service hours",
+          "service open",
+          "service opens",
+          "service close",
+          "service closes",
+          "open on saturday",
+          "open sundays"
+        ]
+      },
+      {
+        "id": "parts_availability",
+        "description": "whether a part can be checked or is available",
+        "answer": "The parts team can check availability and confirm options when they call back.",
+        "aliases": [
+          "in stock",
+          "available",
+          "parts check",
+          "do you have",
+          "do y'all stock",
+          "do you stock",
+          "carry"
+        ]
+      },
+      {
+        "id": "parts_order_status",
+        "description": "already ordered part status, ordered part arrival, parts order update",
+        "answer": "The parts team can review order status and follow up with the latest update.",
+        "aliases": [
+          "parts order",
+          "ordered part",
+          "part arrived",
+          "special order",
+          "order status",
+          "update on an order"
+        ]
+      },
+      {
+        "id": "sales_inventory",
+        "description": "in stock, on the lot, available vehicles, current inventory",
+        "answer": "The sales team can confirm current inventory and follow up with available options.",
+        "aliases": [
+          "on the lot",
+          "available vehicles",
+          "current inventory",
+          "in stock",
+          "electric hyundai",
+          "electric hyundais",
+          "ioniq",
+          "tucson hybrid"
+        ]
+      },
+      {
+        "id": "financing",
+        "description": "financing, lease rates, monthly payments, credit, approval",
+        "answer": "The sales team can review financing questions and follow up with available options.",
+        "aliases": [
+          "lease rate",
+          "lease rates",
+          "monthly payment",
+          "monthly payments",
+          "financing",
+          "finance",
+          "credit",
+          "approval"
+        ]
+      },
+      {
+        "id": "trade_in",
+        "description": "trade-in, appraisal, value of current vehicle",
+        "answer": "The sales team can review trade-in details and follow up with next steps.",
+        "aliases": [
+          "trade-in",
+          "trade in",
+          "trade-ins",
+          "trade ins",
+          "appraise",
+          "appraisal",
+          "current vehicle",
+          "current car",
+          "trade is worth"
+        ]
+      }
+    ]
+  },
+  "response_sanitizer": {
+    "remove": [
+      "for our records",
+      "so I can assist you better",
+      "so I can assist you further",
+      "Mr.",
+      "Mr ",
+      "Ms.",
+      "Ms ",
+      "Mrs.",
+      "Mrs "
+    ],
+    "replace": {
+      "service appointment": "service request",
+      "Service appointment": "Service request"
+    }
+  },
+  "name_capture": {
+    "name_precursors": [
+      "my name is",
+      "name is",
+      "this is",
+      "it's",
+      "it is",
+      "i'm",
+      "i am",
+      "speaking"
+    ],
+    "non_name_precursors": [
+      "this is for",
+      "this is about",
+      "this is regarding",
+      "it's for",
+      "it is for",
+      "i am looking",
+      "i'm looking"
+    ]
+  },
+  "spelling_capture": {
+    "unsolicited_rule": "all letter groups must be single letters; at least two total letters; no digits"
+  }
+}
