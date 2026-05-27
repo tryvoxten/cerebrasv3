@@ -16,6 +16,7 @@ const int response_capacity = 8192;
 const int text_capacity = 1024;
 const int cerebras_capacity = 8192;
 const int context_capacity = 768;
+const int summary_capacity = 4096;
 const int default_port = 8080;
 
 struct Config
@@ -25,6 +26,8 @@ struct Config
   char cerebras_key[256];
   char cerebras_model[128];
   char cerebras_url[256];
+  char delivery_webhook_url[256];
+  char delivery_webhook_secret[128];
 };
 
 struct Buffer
@@ -330,6 +333,8 @@ static void load_config(char** envp, Config* config)
   config->port = default_port;
   clear_buffer(config->shared_secret, 128);
   clear_buffer(config->cerebras_key, 256);
+  clear_buffer(config->delivery_webhook_url, 256);
+  clear_buffer(config->delivery_webhook_secret, 128);
   cerebras_v3::copy_text(config->cerebras_model, "llama3.1-8b", 128);
   cerebras_v3::copy_text(config->cerebras_url, "https://api.cerebras.ai/v1/chat/completions", 256);
   value = find_env(envp, "PORT");
@@ -342,6 +347,10 @@ static void load_config(char** envp, Config* config)
   if (value != 0) { cerebras_v3::copy_text(config->cerebras_model, value, 128); }
   value = find_env(envp, "CEREBRAS_BASE_URL");
   if (value != 0) { cerebras_v3::copy_text(config->cerebras_url, value, 256); }
+  value = find_env(envp, "EMPLOYEE_DELIVERY_WEBHOOK_URL");
+  if (value != 0) { cerebras_v3::copy_text(config->delivery_webhook_url, value, 256); }
+  value = find_env(envp, "EMPLOYEE_DELIVERY_WEBHOOK_SECRET");
+  if (value != 0) { cerebras_v3::copy_text(config->delivery_webhook_secret, value, 128); }
 }
 
 static void extract_json_string_after(const char* text, const char* marker, char* output, int capacity)
@@ -602,6 +611,101 @@ static bool generate_opening_ack_with_cerebras(const Config* config, const char*
   append_text(user, 2048, state_json);
   append_text(user, 2048, "\nWrite the acknowledgement only.");
   return call_cerebras(config, system, user, 60, output, capacity);
+}
+
+static void build_employee_summary_json(const cerebras_v3::State* state, char* output, int capacity)
+{
+  clear_buffer(output, capacity);
+  append_text(output, capacity, "{\"event\":\"call_summary_ready\"");
+  append_text(output, capacity, ",\"department\":\"");
+  json_escape_append(output, capacity, (state != 0) ? cerebras_v3::department_name(state->department) : "unknown");
+  append_text(output, capacity, "\"");
+  append_text(output, capacity, ",\"summary\":\"");
+  if (state != 0)
+  {
+    append_text(output, capacity, "After-hours ");
+    append_text(output, capacity, cerebras_v3::department_name(state->department));
+    append_text(output, capacity, " callback request");
+    if (state->fields[cerebras_v3::field_caller_name].value[0] != '\0')
+    {
+      append_text(output, capacity, " for ");
+      json_escape_append(output, capacity, state->fields[cerebras_v3::field_caller_name].value);
+    }
+    if (state->fields[cerebras_v3::field_request].value[0] != '\0')
+    {
+      append_text(output, capacity, " about ");
+      json_escape_append(output, capacity, state->fields[cerebras_v3::field_request].value);
+    }
+    append_text(output, capacity, ".");
+  }
+  append_text(output, capacity, "\"");
+  append_text(output, capacity, ",\"caller_name\":\"");
+  json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_caller_name].value : "");
+  append_text(output, capacity, "\",\"last_name_spelling\":\"");
+  json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_last_name_spelling].value : "");
+  append_text(output, capacity, "\",\"vehicle\":\"");
+  json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_vehicle].value : "");
+  append_text(output, capacity, "\",\"request\":\"");
+  json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_request].value : "");
+  append_text(output, capacity, "\",\"intent\":\"");
+  json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_intent].value : "");
+  append_text(output, capacity, "\",\"callback_time\":\"");
+  json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_callback_time].value : "");
+  append_text(output, capacity, "\",\"phone\":\"");
+  json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_phone].value : "");
+  append_text(output, capacity, "\",\"phone_confirmed\":");
+  append_text(output, capacity, ((state != 0) && state->fields[cerebras_v3::field_phone_confirmed].confirmed) ? "true" : "false");
+  append_text(output, capacity, ",\"final_confirmed\":");
+  append_text(output, capacity, ((state != 0) && state->fields[cerebras_v3::field_final_confirmed].confirmed) ? "true" : "false");
+  append_text(output, capacity, "}");
+}
+
+static bool deliver_employee_summary(const Config* config, const char* summary_json)
+{
+  CURL* curl = 0;
+  CURLcode code = CURLE_OK;
+  struct curl_slist* headers = 0;
+  Buffer buffer;
+  char secret_header[192];
+  long status = 0L;
+  bool ok = false;
+  if ((config == 0) ||
+      (config->delivery_webhook_url[0] == '\0') ||
+      (summary_json == 0) ||
+      (summary_json[0] == '\0'))
+  {
+    return false;
+  }
+  buffer.length = 0;
+  clear_buffer(buffer.data, cerebras_capacity);
+  curl = curl_easy_init();
+  if (curl == 0)
+  {
+    return false;
+  }
+  headers = curl_slist_append(headers, "content-type: application/json");
+  if (config->delivery_webhook_secret[0] != '\0')
+  {
+    clear_buffer(secret_header, 192);
+    append_text(secret_header, 192, "x-voxten-secret: ");
+    append_text(secret_header, 192, config->delivery_webhook_secret);
+    headers = curl_slist_append(headers, secret_header);
+  }
+  curl_easy_setopt(curl, CURLOPT_URL, config->delivery_webhook_url);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, summary_json);
+  curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 2000L);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
+  code = curl_easy_perform(curl);
+  if (code == CURLE_OK)
+  {
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    ok = (status >= 200L) && (status < 300L);
+  }
+  curl_slist_free_all(headers);
+  curl_easy_cleanup(curl);
+  return ok;
 }
 
 static const char* faq_answer_for_id(const char* faq_id)
@@ -891,11 +995,14 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
   char state_input[2048];
   char state_json[2048];
   char response_text[text_capacity];
+  char employee_summary[summary_capacity];
   char body[response_capacity];
   cerebras_v3::Field_id previous_requested = cerebras_v3::field_none;
   bool used_interpreter = false;
   bool used_generator = false;
   bool used_kb_answer = false;
+  bool delivery_attempted = false;
+  bool delivery_sent = false;
   cerebras_v3::init_state(&state);
   clear_buffer(message, text_capacity);
   clear_buffer(last_assistant, text_capacity);
@@ -903,6 +1010,7 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
   clear_buffer(state_input, 2048);
   clear_buffer(state_json, 2048);
   clear_buffer(response_text, text_capacity);
+  clear_buffer(employee_summary, summary_capacity);
   clear_buffer(body, response_capacity);
   (void)json_value(request, "\"message\"", message, text_capacity);
   (void)json_value(request, "\"last_assistant\"", last_assistant, text_capacity);
@@ -974,6 +1082,20 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
       cerebras_v3::copy_text(response_text, plan.fallback_sentence, text_capacity);
     }
   }
+  if (plan.complete)
+  {
+    build_employee_summary_json(&state, employee_summary, summary_capacity);
+    if (!state.delivery_sent && (config != 0) && (config->delivery_webhook_url[0] != '\0'))
+    {
+      delivery_attempted = true;
+      delivery_sent = deliver_employee_summary(config, employee_summary);
+      if (delivery_sent)
+      {
+        state.delivery_sent = true;
+        cerebras_v3::state_to_json(&state, state_json, 2048);
+      }
+    }
+  }
   sanitize_response_text(response_text, text_capacity);
   append_text(body, response_capacity, "{\"model\":\"cerebras-v3\",");
   append_text(body, response_capacity, "\"used_interpreter\":");
@@ -982,6 +1104,10 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
   append_text(body, response_capacity, used_generator ? "true" : "false");
   append_text(body, response_capacity, ",\"used_kb_answer\":");
   append_text(body, response_capacity, used_kb_answer ? "true" : "false");
+  append_text(body, response_capacity, ",\"delivery_attempted\":");
+  append_text(body, response_capacity, delivery_attempted ? "true" : "false");
+  append_text(body, response_capacity, ",\"delivery_sent\":");
+  append_text(body, response_capacity, ((state.delivery_sent || delivery_sent) ? "true" : "false"));
   append_text(body, response_capacity, ",\"faq_id\":\"");
   json_escape_append(body, response_capacity, interpretation.faq_id);
   append_text(body, response_capacity, "\"");
@@ -994,6 +1120,11 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
   json_escape_append(body, response_capacity, response_text);
   append_text(body, response_capacity, "\",\"state\":");
   append_text(body, response_capacity, state_json);
+  if (employee_summary[0] != '\0')
+  {
+    append_text(body, response_capacity, ",\"employee_summary\":");
+    append_text(body, response_capacity, employee_summary);
+  }
   append_text(body, response_capacity, "}");
   http_json(fd, 200, body);
 }

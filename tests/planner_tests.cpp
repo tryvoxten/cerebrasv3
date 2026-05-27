@@ -253,10 +253,12 @@ static void confirmation_state_roundtrips(void)
   state.fields[cerebras_v3::field_phone_confirmed].confirmed = true;
   state.fields[cerebras_v3::field_final_confirmed].status = cerebras_v3::status_captured;
   state.fields[cerebras_v3::field_final_confirmed].confirmed = true;
+  state.delivery_sent = true;
   cerebras_v3::state_to_json(&state, json, 2048);
   cerebras_v3::load_state_from_json(&loaded, json);
   expect_true(loaded.fields[cerebras_v3::field_phone_confirmed].confirmed, "phone confirmation roundtrips");
   expect_true(loaded.fields[cerebras_v3::field_final_confirmed].confirmed, "final confirmation roundtrips");
+  expect_true(loaded.delivery_sent, "delivery sent roundtrips");
 }
 
 static void generic_vehicle_is_not_captured(void)

@@ -505,6 +505,7 @@ void init_state(State* state)
   }
   state->department = department_unknown;
   state->last_requested = field_none;
+  state->delivery_sent = false;
   for (index = 0; index < 10; index += 1)
   {
     init_field(&state->fields[index]);
@@ -997,6 +998,8 @@ void state_to_json(const State* state, char* output, int capacity)
   append(output, capacity, ((state != 0) && state->fields[field_final_confirmed].confirmed) ? "true" : "false");
   append(output, capacity, ",\"last_requested\":");
   append_json_string(output, capacity, (state != 0) ? field_label(state->last_requested) : "none");
+  append(output, capacity, ",\"delivery_sent\":");
+  append(output, capacity, ((state != 0) && state->delivery_sent) ? "true" : "false");
   append(output, capacity, "}");
 }
 
@@ -1039,6 +1042,7 @@ void load_state_from_json(State* state, const char* json)
     state->fields[field_final_confirmed].status = status_captured;
     state->fields[field_final_confirmed].confirmed = true;
   }
+  state->delivery_sent = json_bool(json, "\"delivery_sent\"");
   if (json_value(json, "\"last_requested\"", value, max_text))
   {
     state->last_requested = field_from_text(value);

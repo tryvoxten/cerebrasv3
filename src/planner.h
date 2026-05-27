@@ -49,6 +49,7 @@ struct State
   Department department;
   Field fields[10];
   Field_id last_requested;
+  bool delivery_sent;
 };
 
 struct Interpretation
