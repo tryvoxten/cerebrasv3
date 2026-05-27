@@ -82,7 +82,7 @@ static void prompt_sections_include_closed_labels(void)
   expect_true(std::strstr(cerebras_v3::generated_kb::interpreter_affirmation_rules, "yes, no, unclear") != 0, "prompt includes affirmation labels");
   expect_true(std::strstr(cerebras_v3::prompt_sections::interpreter_output_rules, "No extra keys") != 0, "prompt includes output rules");
   expect_true(cerebras_v3::generated_kb::faq_entry_count >= 9, "generated faq entries exist");
-  expect_true(cerebras_v3::generated_kb::vehicle_model_count >= 10, "generated vehicles exist");
+  expect_true(cerebras_v3::generated_kb::vehicle_model_count >= 1000, "generated vehicle lexicon is full dataset");
 }
 
 static void name_does_not_capture_spelling_too_early(void)
