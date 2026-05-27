@@ -31,6 +31,8 @@ extern const char* affirmation_unclear_phrases[];
 extern const int affirmation_unclear_count;
 extern const char* vehicle_models[];
 extern const int vehicle_model_count;
+extern const char* vehicle_aliases[];
+extern const int vehicle_alias_count;
 extern const char* interpreter_faq_rules;
 extern const char* interpreter_affirmation_rules;
 

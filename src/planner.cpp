@@ -260,32 +260,72 @@ static bool valid_callback_time(const char* text)
 static bool has_year(const char* text)
 {
   int index = 0;
+  int year = 0;
   if (text == 0)
   {
     return false;
   }
   while (text[index] != '\0')
   {
-    if ((text[index] == '2') &&
-        (text[index + 1] == '0') &&
+    if ((text[index] >= '0') &&
+        (text[index] <= '9') &&
+        (text[index + 1] >= '0') &&
+        (text[index + 1] <= '9') &&
         (text[index + 2] >= '0') &&
         (text[index + 2] <= '9') &&
         (text[index + 3] >= '0') &&
         (text[index + 3] <= '9'))
     {
-      return true;
+      year =
+        ((text[index] - '0') * 1000) +
+        ((text[index + 1] - '0') * 100) +
+        ((text[index + 2] - '0') * 10) +
+        (text[index + 3] - '0');
+      if ((year >= 1995) && (year <= 2026))
+      {
+        return true;
+      }
     }
     index += 1;
   }
   return false;
 }
 
+static void normalize_vehicle_text(char* output, const char* input, int capacity)
+{
+  int in = 0;
+  int out = 0;
+  if ((output == 0) || (capacity <= 0))
+  {
+    return;
+  }
+  if (input == 0)
+  {
+    output[0] = '\0';
+    return;
+  }
+  while ((input[in] != '\0') && (out < (capacity - 1)))
+  {
+    const unsigned char current = static_cast<unsigned char>(input[in]);
+    if (std::isalnum(current) != 0)
+    {
+      output[out] = static_cast<char>(std::tolower(current));
+      out += 1;
+    }
+    in += 1;
+  }
+  output[out] = '\0';
+}
+
 static bool is_whitelisted_vehicle(const char* vehicle)
 {
   char lowered[max_text];
   char model[max_text];
+  char normalized_vehicle[max_text];
+  char normalized_model[max_text];
   int index = 0;
   lowercase(lowered, vehicle, max_text);
+  normalize_vehicle_text(normalized_vehicle, vehicle, max_text);
   if (has_year(lowered))
   {
     return true;
@@ -293,7 +333,21 @@ static bool is_whitelisted_vehicle(const char* vehicle)
   while (index < generated_kb::vehicle_model_count)
   {
     lowercase(model, generated_kb::vehicle_models[index], max_text);
-    if (contains_text(lowered, model))
+    normalize_vehicle_text(normalized_model, generated_kb::vehicle_models[index], max_text);
+    if (contains_text(lowered, model) ||
+        ((normalized_model[0] != '\0') && contains_text(normalized_vehicle, normalized_model)))
+    {
+      return true;
+    }
+    index += 1;
+  }
+  index = 0;
+  while (index < generated_kb::vehicle_alias_count)
+  {
+    lowercase(model, generated_kb::vehicle_aliases[index], max_text);
+    normalize_vehicle_text(normalized_model, generated_kb::vehicle_aliases[index], max_text);
+    if (contains_text(lowered, model) ||
+        ((normalized_model[0] != '\0') && contains_text(normalized_vehicle, normalized_model)))
     {
       return true;
     }

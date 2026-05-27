@@ -83,6 +83,7 @@ static void prompt_sections_include_closed_labels(void)
   expect_true(std::strstr(cerebras_v3::prompt_sections::interpreter_output_rules, "No extra keys") != 0, "prompt includes output rules");
   expect_true(cerebras_v3::generated_kb::faq_entry_count >= 9, "generated faq entries exist");
   expect_true(cerebras_v3::generated_kb::vehicle_model_count >= 1000, "generated vehicle lexicon is full dataset");
+  expect_true(cerebras_v3::generated_kb::vehicle_alias_count >= 3, "generated vehicle aliases exist");
 }
 
 static void name_does_not_capture_spelling_too_early(void)
@@ -296,6 +297,51 @@ static void whitelisted_vehicle_is_captured(void)
   expect_true(plan.next_field != cerebras_v3::field_vehicle, "whitelisted vehicle captures");
 }
 
+static void normalized_vehicle_names_are_captured(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "diagnostic", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "S M I T H", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "Ford F-150", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "truck warning light", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "Ford F-150");
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(plan.next_field != cerebras_v3::field_vehicle, "punctuated vehicle model captures");
+
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "diagnostic", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "S M I T H", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "BMW 3-series", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "sedan warning light", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "BMW 3-series");
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(plan.next_field != cerebras_v3::field_vehicle, "hyphenated vehicle model captures");
+
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "diagnostic", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "S M I T H", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "Hyundai Ioniq five", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "charging issue", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "Hyundai Ioniq five");
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(plan.next_field != cerebras_v3::field_vehicle, "vehicle alias captures");
+}
+
 static void sales_opening_does_not_capture_name(void)
 {
   cerebras_v3::State state;
@@ -438,6 +484,7 @@ int main(void)
   confirmation_state_roundtrips();
   generic_vehicle_is_not_captured();
   whitelisted_vehicle_is_captured();
+  normalized_vehicle_names_are_captured();
   sales_opening_does_not_capture_name();
   requested_name_is_captured();
   precursor_name_is_captured();

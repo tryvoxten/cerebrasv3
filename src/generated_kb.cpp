@@ -1454,6 +1454,15 @@ const char* vehicle_models[] =
 };
 const int vehicle_model_count = sizeof(vehicle_models) / sizeof(vehicle_models[0]);
 
+const char* vehicle_aliases[] =
+{
+  "ionic 5",
+  "ioniq five",
+  "palisades",
+  "santa fe hybrid",
+};
+const int vehicle_alias_count = sizeof(vehicle_aliases) / sizeof(vehicle_aliases[0]);
+
 const char* interpreter_faq_rules =
   "f must be exactly one of: none, recall_service, warranty_service, ev_battery_service, service_hours, parts_availability, parts_order_status, sales_inventory, financing, trade_in. FAQ meanings: recall_service=recall, manufacturer recall, open recall, recall notice; warranty_service=warranty, manufacturer warranty, warranty coverage; ev_battery_service=EV battery, high-voltage battery, electric car battery warning; service_hours=service hours, when service opens or closes, service department schedule; parts_availability=whether a part can be checked or is available; parts_order_status=already ordered part status, ordered part arrival, parts order update; sales_inventory=in stock, on the lot, available vehicles, current inventory; financing=financing, lease rates, monthly payments, credit, approval; trade_in=trade-in, appraisal, value of current vehicle. Priority: trade_in beats sales_inventory; financing beats sales_inventory; ev_battery_service beats warranty_service; parts_order_status beats parts_availability.";
 

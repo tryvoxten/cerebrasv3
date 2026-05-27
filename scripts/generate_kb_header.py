@@ -81,6 +81,8 @@ extern const char* affirmation_unclear_phrases[];
 extern const int affirmation_unclear_count;
 extern const char* vehicle_models[];
 extern const int vehicle_model_count;
+extern const char* vehicle_aliases[];
+extern const int vehicle_alias_count;
 extern const char* interpreter_faq_rules;
 extern const char* interpreter_affirmation_rules;
 
@@ -102,6 +104,7 @@ def write_cpp(path, kb):
 
     affirmation = kb["affirmation_runtime"]
     vehicles = kb["vehicle_lexicon"]["models"]
+    vehicle_aliases = sorted(kb["vehicle_lexicon"].get("aliases", {}).keys())
     faq_prompt = build_faq_prompt(kb)
     affirmation_prompt = build_affirmation_prompt(kb)
 
@@ -185,6 +188,17 @@ def write_cpp(path, kb):
         [
             "};",
             "const int vehicle_model_count = sizeof(vehicle_models) / sizeof(vehicle_models[0]);",
+            "",
+            "const char* vehicle_aliases[] =",
+            "{",
+        ]
+    )
+    for alias in vehicle_aliases:
+        lines.append("  " + quoted(alias) + ",")
+    lines.extend(
+        [
+            "};",
+            "const int vehicle_alias_count = sizeof(vehicle_aliases) / sizeof(vehicle_aliases[0]);",
             "",
             "const char* interpreter_faq_rules =",
             "  " + quoted(faq_prompt) + ";",
