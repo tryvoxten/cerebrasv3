@@ -57,6 +57,72 @@ callback time, and phone number. If `EMPLOYEE_DELIVERY_WEBHOOK_URL` is set, the
 service posts that summary to the webhook once and stores `delivery_sent` in the
 returned state to prevent duplicate delivery.
 
+## n8n Employee Email Delivery
+
+The app connects to n8n with a regular HTTPS webhook. No websocket is required.
+
+Set these two environment variables on Fly:
+
+```bash
+EMPLOYEE_DELIVERY_WEBHOOK_URL=https://YOUR-NGROK-OR-N8N-DOMAIN/webhook/voxten/v1/employee-delivery/secure/YOUR_PATH_SECRET/summary
+EMPLOYEE_DELIVERY_WEBHOOK_SECRET=YOUR_HEADER_SECRET
+```
+
+The app sends:
+
+```http
+POST $EMPLOYEE_DELIVERY_WEBHOOK_URL
+content-type: application/json
+x-voxten-secret: $EMPLOYEE_DELIVERY_WEBHOOK_SECRET
+```
+
+With this JSON body:
+
+```json
+{
+  "event": "call_summary_ready",
+  "department": "service",
+  "summary": "After-hours service callback request for Jordan Smith about truck warning light.",
+  "caller_name": "Jordan Smith",
+  "last_name_spelling": "S M I T H",
+  "vehicle": "Ford F-150",
+  "request": "truck warning light",
+  "intent": "diagnostic",
+  "callback_time": "next Tuesday morning",
+  "phone": "416 555 0199",
+  "phone_confirmed": true,
+  "final_confirmed": true
+}
+```
+
+In n8n, create a Webhook node with this path, without the leading
+`/webhook/` or `/webhook-test/` prefix:
+
+```text
+voxten/v1/employee-delivery/secure/YOUR_PATH_SECRET/summary
+```
+
+Use the n8n test URL while editing:
+
+```text
+https://YOUR-NGROK-OR-N8N-DOMAIN/webhook-test/voxten/v1/employee-delivery/secure/YOUR_PATH_SECRET/summary
+```
+
+Use the production URL after activating the workflow:
+
+```text
+https://YOUR-NGROK-OR-N8N-DOMAIN/webhook/voxten/v1/employee-delivery/secure/YOUR_PATH_SECRET/summary
+```
+
+To set it on Fly:
+
+```bash
+flyctl secrets set \
+  EMPLOYEE_DELIVERY_WEBHOOK_URL="https://YOUR-NGROK-OR-N8N-DOMAIN/webhook/voxten/v1/employee-delivery/secure/YOUR_PATH_SECRET/summary" \
+  EMPLOYEE_DELIVERY_WEBHOOK_SECRET="YOUR_HEADER_SECRET" \
+  --app YOUR_FLY_APP_NAME
+```
+
 ## Pilot Acceptance Batch
 
 The pilot standard lives in `PILOT_TEST_STANDARD.md`. Run the fixed 12-call
