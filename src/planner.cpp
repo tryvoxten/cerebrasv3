@@ -203,6 +203,16 @@ static bool has_callback_window_signal(const char* lowered)
     contains_text(lowered, "morning") ||
     contains_text(lowered, "afternoon") ||
     contains_text(lowered, "lunch") ||
+    contains_text(lowered, "noon") ||
+    contains_text(lowered, "at 9") ||
+    contains_text(lowered, "at 10") ||
+    contains_text(lowered, "at 11") ||
+    contains_text(lowered, "at 12") ||
+    contains_text(lowered, "at 1") ||
+    contains_text(lowered, "at 2") ||
+    contains_text(lowered, "at 3") ||
+    contains_text(lowered, "at 4") ||
+    contains_text(lowered, "at 5") ||
     contains_text(lowered, "after 9") ||
     contains_text(lowered, "after 10") ||
     contains_text(lowered, "after 11") ||

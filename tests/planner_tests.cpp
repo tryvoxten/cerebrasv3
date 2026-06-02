@@ -456,6 +456,31 @@ static void callback_time_must_be_inside_allowed_window(void)
   cerebras_v3::init_state(&state);
   cerebras_v3::clear_interpretation(&interpretation);
   cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "maintenance", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "S M I T H", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "Tucson", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "dash warning", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.callback_time, "tomorrow at 10 AM", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "tomorrow at 10 AM");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(plan.next_field != cerebras_v3::field_callback_time, "tomorrow at 10 AM captures");
+
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "sales", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "test drive", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Alex Rivera", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "R I V E R A", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "test drive", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.callback_time, "Friday at noon", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "Friday at noon");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(plan.next_field != cerebras_v3::field_callback_time, "Friday at noon captures");
+
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
   cerebras_v3::copy_text(interpretation.intent, "recall", cerebras_v3::max_text);
   cerebras_v3::copy_text(interpretation.name, "Morgan Lee", cerebras_v3::max_text);
   cerebras_v3::copy_text(interpretation.spelling, "L E E", cerebras_v3::max_text);
