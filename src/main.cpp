@@ -1194,19 +1194,28 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
 
 static bool request_header_value(const char* request, const char* name, char* output, int capacity)
 {
+  char lowered_request[request_capacity];
+  char lowered_name[128];
   const char* found = 0;
   const char* value = 0;
+  int header_offset = 0;
   int out = 0;
   clear_buffer(output, capacity);
   if ((request == 0) || (name == 0) || (output == 0) || (capacity <= 0))
   {
     return false;
   }
-  found = std::strstr(request, name);
+  lowercase_text(lowered_request, request, request_capacity);
+  lowercase_text(lowered_name, name, 128);
+  found = std::strstr(lowered_request, lowered_name);
   if (found == 0) { return false; }
-  found = std::strchr(found, ':');
-  if (found == 0) { return false; }
-  value = found + 1;
+  header_offset = static_cast<int>(found - lowered_request);
+  found = std::strchr(&lowered_request[header_offset], ':');
+  if (found == 0)
+  {
+    return false;
+  }
+  value = &request[header_offset + static_cast<int>(found - &lowered_request[header_offset]) + 1];
   while ((*value == ' ') || (*value == '\t')) { value += 1; }
   while ((*value != '\0') && (*value != '\r') && (*value != '\n') && (out < (capacity - 1)))
   {
