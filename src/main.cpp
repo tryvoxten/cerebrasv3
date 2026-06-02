@@ -30,6 +30,7 @@ struct Config
   char cerebras_url[256];
   char delivery_webhook_url[256];
   char delivery_webhook_secret[128];
+  bool cerebras_debug;
 };
 
 struct Buffer
@@ -352,6 +353,7 @@ static void load_config(char** envp, Config* config)
   clear_buffer(config->cerebras_key, 256);
   clear_buffer(config->delivery_webhook_url, 256);
   clear_buffer(config->delivery_webhook_secret, 128);
+  config->cerebras_debug = false;
   cerebras_v3::copy_text(config->cerebras_model, "llama3.1-8b", 128);
   cerebras_v3::copy_text(config->cerebras_url, "https://api.cerebras.ai/v1/chat/completions", 256);
   value = find_env(envp, "PORT");
@@ -368,6 +370,8 @@ static void load_config(char** envp, Config* config)
   if (value != 0) { cerebras_v3::copy_text(config->delivery_webhook_url, value, 256); }
   value = find_env(envp, "EMPLOYEE_DELIVERY_WEBHOOK_SECRET");
   if (value != 0) { cerebras_v3::copy_text(config->delivery_webhook_secret, value, 128); }
+  value = find_env(envp, "CEREBRAS_DEBUG");
+  if ((value != 0) && (std::strcmp(value, "1") == 0)) { config->cerebras_debug = true; }
 }
 
 static void extract_json_string_after(const char* text, const char* marker, char* output, int capacity)
@@ -575,7 +579,15 @@ static bool interpret_with_cerebras(
   append_limited(user, 2048, caller, 300);
   if (!call_cerebras(config, system, user, 80, content, text_capacity))
   {
+    if ((config != 0) && config->cerebras_debug)
+    {
+      std::fprintf(stderr, "CEREBRAS_INTERPRETER_CALL_FAILED caller=\"%s\"\n", (caller != 0) ? caller : "");
+    }
     return false;
+  }
+  if ((config != 0) && config->cerebras_debug)
+  {
+    std::fprintf(stderr, "CEREBRAS_INTERPRETER_RAW caller=\"%s\" raw=\"%s\"\n", (caller != 0) ? caller : "", content);
   }
   return cerebras_v3::parse_interpretation_json(content, interpretation);
 }
@@ -1128,6 +1140,23 @@ static void process_chat_turn(
     correct_faq_id_from_message(message, &interpretation);
   }
   apply_local_interpretation_fallback(message, &interpretation);
+  if ((config != 0) && config->cerebras_debug)
+  {
+    std::fprintf(
+      stderr,
+      "INTERPRETATION_FINAL caller=\"%s\" d=\"%s\" i=\"%s\" v=\"%s\" r=\"%s\" cb=\"%s\" p=\"%s\" n=\"%s\" s=\"%s\" a=\"%s\" f=\"%s\"\n",
+      (message != 0) ? message : "",
+      interpretation.department,
+      interpretation.intent,
+      interpretation.vehicle,
+      interpretation.request,
+      interpretation.callback_time,
+      interpretation.phone,
+      interpretation.name,
+      interpretation.spelling,
+      interpretation.affirmation,
+      interpretation.faq_id);
+  }
   cerebras_v3::merge_interpretation(state, &interpretation, message);
   previous_requested = state->last_requested;
   plan = cerebras_v3::plan_next(state);
