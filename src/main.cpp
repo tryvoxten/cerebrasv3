@@ -1157,7 +1157,9 @@ static void handle_connection(int fd, const Config* config)
   {
     http_json(fd, 404, "{\"error\":\"unauthorized\"}");
   }
-  else if (starts_with(request, "POST /test-chat"))
+  else if (starts_with(request, "POST /test-chat") ||
+           starts_with(request, "POST /retell") ||
+           starts_with(request, "POST /call-turn"))
   {
     handle_test_chat(fd, request, config);
   }

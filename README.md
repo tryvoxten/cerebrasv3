@@ -51,6 +51,17 @@ curl -sS http://127.0.0.1:8098/test-chat \
 The response includes the updated state, chosen next field, whether Cerebras was
 used for interpretation/response, and the caller-facing content.
 
+Production turn endpoints:
+
+```text
+POST /retell
+POST /call-turn
+POST /test-chat
+```
+
+All three use the same handler. `/test-chat` is kept for compatibility with the
+pilot scripts; `/retell` is the cleaner production path.
+
 When a call reaches final confirmation, the response also includes an
 `employee_summary` object with the department, caller, vehicle, request,
 callback time, and phone number. If `EMPLOYEE_DELIVERY_WEBHOOK_URL` is set, the

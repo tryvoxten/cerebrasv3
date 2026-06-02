@@ -1,4 +1,4 @@
-app = "voxten-cerebras-v3-2"
+app = "voxten-cerebras-v3"
 primary_region = "yyz"
 
 [build]
