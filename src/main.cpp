@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 
 namespace
@@ -17,6 +18,7 @@ const int text_capacity = 1024;
 const int cerebras_capacity = 8192;
 const int context_capacity = 768;
 const int summary_capacity = 4096;
+const int websocket_capacity = 8192;
 const int default_port = 8080;
 
 struct Config
@@ -34,6 +36,21 @@ struct Buffer
 {
   char data[cerebras_capacity];
   int length;
+};
+
+struct Turn_result
+{
+  char response_text[text_capacity];
+  char state_json[2048];
+  char employee_summary[summary_capacity];
+  char next_field[64];
+  char faq_id[64];
+  char affirmation[32];
+  bool used_interpreter;
+  bool used_generator;
+  bool used_kb_answer;
+  bool delivery_attempted;
+  bool delivery_sent;
 };
 
 static void clear_buffer(char* buffer, int capacity)
@@ -957,6 +974,136 @@ static bool json_value(const char* json, const char* key, char* output, int capa
   return (output[0] != '\0');
 }
 
+static int json_int_value(const char* json, const char* key, int fallback)
+{
+  const char* found = 0;
+  int value = 0;
+  bool any = false;
+  if ((json == 0) || (key == 0))
+  {
+    return fallback;
+  }
+  found = std::strstr(json, key);
+  if (found == 0) { return fallback; }
+  found = std::strchr(found, ':');
+  if (found == 0) { return fallback; }
+  found += 1;
+  while ((*found == ' ') || (*found == '\n') || (*found == '\r')) { found += 1; }
+  while ((*found >= '0') && (*found <= '9'))
+  {
+    value = (value * 10) + (*found - '0');
+    any = true;
+    found += 1;
+  }
+  return any ? value : fallback;
+}
+
+static void clear_turn_result(Turn_result* result)
+{
+  if (result == 0)
+  {
+    return;
+  }
+  clear_buffer(result->response_text, text_capacity);
+  clear_buffer(result->state_json, 2048);
+  clear_buffer(result->employee_summary, summary_capacity);
+  clear_buffer(result->next_field, 64);
+  clear_buffer(result->faq_id, 64);
+  clear_buffer(result->affirmation, 32);
+  result->used_interpreter = false;
+  result->used_generator = false;
+  result->used_kb_answer = false;
+  result->delivery_attempted = false;
+  result->delivery_sent = false;
+}
+
+static void process_chat_turn(
+  cerebras_v3::State* state,
+  const Config* config,
+  const char* message,
+  const char* last_assistant,
+  const char* recent_context,
+  Turn_result* result)
+{
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::Field_id previous_requested = cerebras_v3::field_none;
+  if ((state == 0) || (result == 0))
+  {
+    return;
+  }
+  clear_turn_result(result);
+  cerebras_v3::state_to_json(state, result->state_json, 2048);
+  cerebras_v3::clear_interpretation(&interpretation);
+  result->used_interpreter = interpret_with_cerebras(config, result->state_json, recent_context, last_assistant, message, &interpretation);
+  if (result->used_interpreter)
+  {
+    correct_faq_id_from_message(message, &interpretation);
+    cerebras_v3::merge_interpretation(state, &interpretation, message);
+  }
+  previous_requested = state->last_requested;
+  plan = cerebras_v3::plan_next(state);
+  state->last_requested = plan.next_field;
+  cerebras_v3::state_to_json(state, result->state_json, 2048);
+  if ((interpretation.faq_id[0] != '\0') && latest_caller_looks_like_question(message, &interpretation))
+  {
+    const char* faq_answer = faq_answer_for_id(interpretation.faq_id);
+    if (faq_answer[0] != '\0')
+    {
+      char question[text_capacity];
+      clear_buffer(question, text_capacity);
+      result->used_kb_answer = true;
+      append_text(result->response_text, text_capacity, faq_answer);
+      if ((plan.next_field != cerebras_v3::field_none) && template_response(state, &plan, question, text_capacity))
+      {
+        append_text(result->response_text, text_capacity, " ");
+        append_text(result->response_text, text_capacity, question);
+      }
+    }
+  }
+  if ((result->response_text[0] == '\0') && should_generate_opening_ack(state, &plan, previous_requested))
+  {
+    result->used_generator = generate_opening_ack_with_cerebras(config, result->state_json, result->response_text, text_capacity);
+    if (result->used_generator)
+    {
+      sanitize_response_text(result->response_text, text_capacity);
+      if ((result->response_text[0] != '\0') &&
+          (result->response_text[static_cast<int>(std::strlen(result->response_text)) - 1] != '.') &&
+          (result->response_text[static_cast<int>(std::strlen(result->response_text)) - 1] != '!'))
+      {
+        append_text(result->response_text, text_capacity, ".");
+      }
+      append_text(result->response_text, text_capacity, " Can I please have your first and last name?");
+    }
+  }
+  if ((result->response_text[0] == '\0') && !template_response(state, &plan, result->response_text, text_capacity))
+  {
+    result->used_generator = generate_with_cerebras(config, result->state_json, &plan, result->response_text, text_capacity);
+  }
+  if (!result->used_generator && (result->response_text[0] == '\0'))
+  {
+    cerebras_v3::copy_text(result->response_text, plan.fallback_sentence, text_capacity);
+  }
+  if (plan.complete)
+  {
+    build_employee_summary_json(state, result->employee_summary, summary_capacity);
+    if (!state->delivery_sent && (config != 0) && (config->delivery_webhook_url[0] != '\0'))
+    {
+      result->delivery_attempted = true;
+      result->delivery_sent = deliver_employee_summary(config, result->employee_summary);
+      if (result->delivery_sent)
+      {
+        state->delivery_sent = true;
+        cerebras_v3::state_to_json(state, result->state_json, 2048);
+      }
+    }
+  }
+  sanitize_response_text(result->response_text, text_capacity);
+  cerebras_v3::copy_text(result->next_field, cerebras_v3::field_label(plan.next_field), 64);
+  cerebras_v3::copy_text(result->faq_id, interpretation.faq_id, 64);
+  cerebras_v3::copy_text(result->affirmation, interpretation.affirmation, 32);
+}
+
 static void http_json(int fd, int status, const char* body)
 {
   char response[response_capacity];
@@ -987,30 +1134,18 @@ static void http_json(int fd, int status, const char* body)
 static void handle_test_chat(int fd, const char* request, const Config* config)
 {
   cerebras_v3::State state;
-  cerebras_v3::Interpretation interpretation;
-  cerebras_v3::Plan plan;
+  Turn_result result;
   char message[text_capacity];
   char last_assistant[text_capacity];
   char recent_context[context_capacity];
   char state_input[2048];
-  char state_json[2048];
-  char response_text[text_capacity];
-  char employee_summary[summary_capacity];
   char body[response_capacity];
-  cerebras_v3::Field_id previous_requested = cerebras_v3::field_none;
-  bool used_interpreter = false;
-  bool used_generator = false;
-  bool used_kb_answer = false;
-  bool delivery_attempted = false;
-  bool delivery_sent = false;
   cerebras_v3::init_state(&state);
+  clear_turn_result(&result);
   clear_buffer(message, text_capacity);
   clear_buffer(last_assistant, text_capacity);
   clear_buffer(recent_context, context_capacity);
   clear_buffer(state_input, 2048);
-  clear_buffer(state_json, 2048);
-  clear_buffer(response_text, text_capacity);
-  clear_buffer(employee_summary, summary_capacity);
   clear_buffer(body, response_capacity);
   (void)json_value(request, "\"message\"", message, text_capacity);
   (void)json_value(request, "\"last_assistant\"", last_assistant, text_capacity);
@@ -1024,109 +1159,460 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
   {
     cerebras_v3::load_state_from_json(&state, state_input);
   }
-  cerebras_v3::state_to_json(&state, state_json, 2048);
-  cerebras_v3::clear_interpretation(&interpretation);
-  used_interpreter = interpret_with_cerebras(config, state_json, recent_context, last_assistant, message, &interpretation);
-  if (used_interpreter)
-  {
-    correct_faq_id_from_message(message, &interpretation);
-  }
-  if (used_interpreter)
-  {
-    cerebras_v3::merge_interpretation(&state, &interpretation, message);
-  }
-  previous_requested = state.last_requested;
-  plan = cerebras_v3::plan_next(&state);
-  state.last_requested = plan.next_field;
-  cerebras_v3::state_to_json(&state, state_json, 2048);
-  used_generator = false;
-  if ((interpretation.faq_id[0] != '\0') && latest_caller_looks_like_question(message, &interpretation))
-  {
-    const char* faq_answer = faq_answer_for_id(interpretation.faq_id);
-    if (faq_answer[0] != '\0')
-    {
-      char question[text_capacity];
-      clear_buffer(question, text_capacity);
-      used_kb_answer = true;
-      append_text(response_text, text_capacity, faq_answer);
-      if ((plan.next_field != cerebras_v3::field_none) && template_response(&state, &plan, question, text_capacity))
-      {
-        append_text(response_text, text_capacity, " ");
-        append_text(response_text, text_capacity, question);
-      }
-    }
-  }
-  if ((response_text[0] == '\0') && should_generate_opening_ack(&state, &plan, previous_requested))
-  {
-    used_generator = generate_opening_ack_with_cerebras(config, state_json, response_text, text_capacity);
-    if (used_generator)
-    {
-      sanitize_response_text(response_text, text_capacity);
-      if ((response_text[0] != '\0') &&
-          (response_text[static_cast<int>(std::strlen(response_text)) - 1] != '.') &&
-          (response_text[static_cast<int>(std::strlen(response_text)) - 1] != '!'))
-      {
-        append_text(response_text, text_capacity, ".");
-      }
-      append_text(response_text, text_capacity, " Can I please have your first and last name?");
-    }
-  }
-  if ((response_text[0] == '\0') && !template_response(&state, &plan, response_text, text_capacity))
-  {
-    used_generator = generate_with_cerebras(config, state_json, &plan, response_text, text_capacity);
-  }
-  if (!used_generator)
-  {
-    if (response_text[0] == '\0')
-    {
-      cerebras_v3::copy_text(response_text, plan.fallback_sentence, text_capacity);
-    }
-  }
-  if (plan.complete)
-  {
-    build_employee_summary_json(&state, employee_summary, summary_capacity);
-    if (!state.delivery_sent && (config != 0) && (config->delivery_webhook_url[0] != '\0'))
-    {
-      delivery_attempted = true;
-      delivery_sent = deliver_employee_summary(config, employee_summary);
-      if (delivery_sent)
-      {
-        state.delivery_sent = true;
-        cerebras_v3::state_to_json(&state, state_json, 2048);
-      }
-    }
-  }
-  sanitize_response_text(response_text, text_capacity);
+  process_chat_turn(&state, config, message, last_assistant, recent_context, &result);
   append_text(body, response_capacity, "{\"model\":\"cerebras-v3\",");
   append_text(body, response_capacity, "\"used_interpreter\":");
-  append_text(body, response_capacity, used_interpreter ? "true" : "false");
+  append_text(body, response_capacity, result.used_interpreter ? "true" : "false");
   append_text(body, response_capacity, ",\"used_generator\":");
-  append_text(body, response_capacity, used_generator ? "true" : "false");
+  append_text(body, response_capacity, result.used_generator ? "true" : "false");
   append_text(body, response_capacity, ",\"used_kb_answer\":");
-  append_text(body, response_capacity, used_kb_answer ? "true" : "false");
+  append_text(body, response_capacity, result.used_kb_answer ? "true" : "false");
   append_text(body, response_capacity, ",\"delivery_attempted\":");
-  append_text(body, response_capacity, delivery_attempted ? "true" : "false");
+  append_text(body, response_capacity, result.delivery_attempted ? "true" : "false");
   append_text(body, response_capacity, ",\"delivery_sent\":");
-  append_text(body, response_capacity, ((state.delivery_sent || delivery_sent) ? "true" : "false"));
+  append_text(body, response_capacity, ((state.delivery_sent || result.delivery_sent) ? "true" : "false"));
   append_text(body, response_capacity, ",\"faq_id\":\"");
-  json_escape_append(body, response_capacity, interpretation.faq_id);
+  json_escape_append(body, response_capacity, result.faq_id);
   append_text(body, response_capacity, "\"");
   append_text(body, response_capacity, ",\"affirmation\":\"");
-  json_escape_append(body, response_capacity, interpretation.affirmation);
+  json_escape_append(body, response_capacity, result.affirmation);
   append_text(body, response_capacity, "\"");
   append_text(body, response_capacity, ",\"next_field\":\"");
-  append_text(body, response_capacity, cerebras_v3::field_label(plan.next_field));
+  append_text(body, response_capacity, result.next_field);
   append_text(body, response_capacity, "\",\"content\":\"");
-  json_escape_append(body, response_capacity, response_text);
+  json_escape_append(body, response_capacity, result.response_text);
   append_text(body, response_capacity, "\",\"state\":");
-  append_text(body, response_capacity, state_json);
-  if (employee_summary[0] != '\0')
+  append_text(body, response_capacity, result.state_json);
+  if (result.employee_summary[0] != '\0')
   {
     append_text(body, response_capacity, ",\"employee_summary\":");
-    append_text(body, response_capacity, employee_summary);
+    append_text(body, response_capacity, result.employee_summary);
   }
   append_text(body, response_capacity, "}");
   http_json(fd, 200, body);
+}
+
+static bool request_header_value(const char* request, const char* name, char* output, int capacity)
+{
+  const char* found = 0;
+  const char* value = 0;
+  int out = 0;
+  clear_buffer(output, capacity);
+  if ((request == 0) || (name == 0) || (output == 0) || (capacity <= 0))
+  {
+    return false;
+  }
+  found = std::strstr(request, name);
+  if (found == 0) { return false; }
+  found = std::strchr(found, ':');
+  if (found == 0) { return false; }
+  value = found + 1;
+  while ((*value == ' ') || (*value == '\t')) { value += 1; }
+  while ((*value != '\0') && (*value != '\r') && (*value != '\n') && (out < (capacity - 1)))
+  {
+    output[out] = *value;
+    out += 1;
+    value += 1;
+  }
+  output[out] = '\0';
+  return output[0] != '\0';
+}
+
+static void base64_encode(const unsigned char* input, int input_length, char* output, int capacity)
+{
+  static const char* table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  int index = 0;
+  int out = 0;
+  if ((input == 0) || (output == 0) || (capacity <= 0))
+  {
+    return;
+  }
+  while ((index < input_length) && (out < (capacity - 4)))
+  {
+    const int remaining = input_length - index;
+    const unsigned int a = input[index];
+    const unsigned int b = (remaining > 1) ? input[index + 1] : 0U;
+    const unsigned int c = (remaining > 2) ? input[index + 2] : 0U;
+    const unsigned int triple = (a << 16) | (b << 8) | c;
+    output[out] = table[(triple >> 18) & 63U]; out += 1;
+    output[out] = table[(triple >> 12) & 63U]; out += 1;
+    output[out] = (remaining > 1) ? table[(triple >> 6) & 63U] : '='; out += 1;
+    output[out] = (remaining > 2) ? table[triple & 63U] : '='; out += 1;
+    index += 3;
+  }
+  output[out] = '\0';
+}
+
+static unsigned int rotate_left(unsigned int value, int bits)
+{
+  return (value << bits) | (value >> (32 - bits));
+}
+
+static void sha1_digest(const unsigned char* input, int input_length, unsigned char* digest)
+{
+  unsigned int h0 = 0x67452301U;
+  unsigned int h1 = 0xEFCDAB89U;
+  unsigned int h2 = 0x98BADCFEU;
+  unsigned int h3 = 0x10325476U;
+  unsigned int h4 = 0xC3D2E1F0U;
+  unsigned char block[128];
+  unsigned int w[80];
+  int total = 0;
+  int block_count = 0;
+  int block_index = 0;
+  int i = 0;
+  const unsigned int bit_length_low = static_cast<unsigned int>(input_length) * 8U;
+  const unsigned int bit_length_high = 0U;
+  std::memset(block, 0, sizeof(block));
+  if ((input != 0) && (input_length > 0))
+  {
+    std::memcpy(block, input, static_cast<unsigned long>(input_length));
+  }
+  block[input_length] = 0x80U;
+  total = input_length + 1;
+  while ((total % 64) != 56)
+  {
+    total += 1;
+  }
+  block[total] = static_cast<unsigned char>((bit_length_high >> 24) & 255U);
+  block[total + 1] = static_cast<unsigned char>((bit_length_high >> 16) & 255U);
+  block[total + 2] = static_cast<unsigned char>((bit_length_high >> 8) & 255U);
+  block[total + 3] = static_cast<unsigned char>(bit_length_high & 255U);
+  block[total + 4] = static_cast<unsigned char>((bit_length_low >> 24) & 255U);
+  block[total + 5] = static_cast<unsigned char>((bit_length_low >> 16) & 255U);
+  block[total + 6] = static_cast<unsigned char>((bit_length_low >> 8) & 255U);
+  block[total + 7] = static_cast<unsigned char>(bit_length_low & 255U);
+  total += 8;
+  block_count = total / 64;
+  while (block_index < block_count)
+  {
+    unsigned int a = h0;
+    unsigned int b = h1;
+    unsigned int c = h2;
+    unsigned int d = h3;
+    unsigned int e = h4;
+    i = 0;
+    while (i < 16)
+    {
+      const int offset = (block_index * 64) + (i * 4);
+      w[i] =
+        (static_cast<unsigned int>(block[offset]) << 24) |
+        (static_cast<unsigned int>(block[offset + 1]) << 16) |
+        (static_cast<unsigned int>(block[offset + 2]) << 8) |
+        static_cast<unsigned int>(block[offset + 3]);
+      i += 1;
+    }
+    while (i < 80)
+    {
+      w[i] = rotate_left(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+      i += 1;
+    }
+    i = 0;
+    while (i < 80)
+    {
+      unsigned int f = 0U;
+      unsigned int k = 0U;
+      unsigned int temp = 0U;
+      if (i < 20)
+      {
+        f = (b & c) | ((~b) & d);
+        k = 0x5A827999U;
+      }
+      else if (i < 40)
+      {
+        f = b ^ c ^ d;
+        k = 0x6ED9EBA1U;
+      }
+      else if (i < 60)
+      {
+        f = (b & c) | (b & d) | (c & d);
+        k = 0x8F1BBCDCU;
+      }
+      else
+      {
+        f = b ^ c ^ d;
+        k = 0xCA62C1D6U;
+      }
+      temp = rotate_left(a, 5) + f + e + k + w[i];
+      e = d;
+      d = c;
+      c = rotate_left(b, 30);
+      b = a;
+      a = temp;
+      i += 1;
+    }
+    h0 += a;
+    h1 += b;
+    h2 += c;
+    h3 += d;
+    h4 += e;
+    block_index += 1;
+  }
+  digest[0] = static_cast<unsigned char>((h0 >> 24) & 255U);
+  digest[1] = static_cast<unsigned char>((h0 >> 16) & 255U);
+  digest[2] = static_cast<unsigned char>((h0 >> 8) & 255U);
+  digest[3] = static_cast<unsigned char>(h0 & 255U);
+  digest[4] = static_cast<unsigned char>((h1 >> 24) & 255U);
+  digest[5] = static_cast<unsigned char>((h1 >> 16) & 255U);
+  digest[6] = static_cast<unsigned char>((h1 >> 8) & 255U);
+  digest[7] = static_cast<unsigned char>(h1 & 255U);
+  digest[8] = static_cast<unsigned char>((h2 >> 24) & 255U);
+  digest[9] = static_cast<unsigned char>((h2 >> 16) & 255U);
+  digest[10] = static_cast<unsigned char>((h2 >> 8) & 255U);
+  digest[11] = static_cast<unsigned char>(h2 & 255U);
+  digest[12] = static_cast<unsigned char>((h3 >> 24) & 255U);
+  digest[13] = static_cast<unsigned char>((h3 >> 16) & 255U);
+  digest[14] = static_cast<unsigned char>((h3 >> 8) & 255U);
+  digest[15] = static_cast<unsigned char>(h3 & 255U);
+  digest[16] = static_cast<unsigned char>((h4 >> 24) & 255U);
+  digest[17] = static_cast<unsigned char>((h4 >> 16) & 255U);
+  digest[18] = static_cast<unsigned char>((h4 >> 8) & 255U);
+  digest[19] = static_cast<unsigned char>(h4 & 255U);
+}
+
+static bool websocket_accept_key(const char* key, char* output, int capacity)
+{
+  char source[256];
+  unsigned char digest[20];
+  clear_buffer(source, 256);
+  if ((key == 0) || (output == 0))
+  {
+    return false;
+  }
+  append_text(source, 256, key);
+  append_text(source, 256, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+  sha1_digest(reinterpret_cast<const unsigned char*>(source), static_cast<int>(std::strlen(source)), digest);
+  base64_encode(digest, 20, output, capacity);
+  return output[0] != '\0';
+}
+
+static bool websocket_handshake(int fd, const char* request)
+{
+  char key[128];
+  char accept[128];
+  char response[512];
+  if (!request_header_value(request, "Sec-WebSocket-Key", key, 128))
+  {
+    return false;
+  }
+  if (!websocket_accept_key(key, accept, 128))
+  {
+    return false;
+  }
+  clear_buffer(response, 512);
+  append_text(response, 512, "HTTP/1.1 101 Switching Protocols\r\n");
+  append_text(response, 512, "Upgrade: websocket\r\n");
+  append_text(response, 512, "Connection: Upgrade\r\n");
+  append_text(response, 512, "Sec-WebSocket-Accept: ");
+  append_text(response, 512, accept);
+  append_text(response, 512, "\r\n\r\n");
+  return write(fd, response, std::strlen(response)) > 0;
+}
+
+static bool read_exact(int fd, unsigned char* output, int length)
+{
+  int offset = 0;
+  while (offset < length)
+  {
+    const ssize_t count = read(fd, &output[offset], static_cast<unsigned long>(length - offset));
+    if (count <= 0)
+    {
+      return false;
+    }
+    offset += static_cast<int>(count);
+  }
+  return true;
+}
+
+static bool websocket_read_text(int fd, char* output, int capacity, int* opcode)
+{
+  unsigned char header[2];
+  unsigned char mask[4];
+  int length = 0;
+  int index = 0;
+  bool masked = false;
+  clear_buffer(output, capacity);
+  if ((output == 0) || (capacity <= 0) || (opcode == 0))
+  {
+    return false;
+  }
+  if (!read_exact(fd, header, 2))
+  {
+    return false;
+  }
+  *opcode = header[0] & 15;
+  masked = (header[1] & 128U) != 0U;
+  length = header[1] & 127;
+  if (length == 126)
+  {
+    unsigned char extended[2];
+    if (!read_exact(fd, extended, 2)) { return false; }
+    length = (static_cast<int>(extended[0]) << 8) | static_cast<int>(extended[1]);
+  }
+  else if (length == 127)
+  {
+    return false;
+  }
+  if (length >= capacity)
+  {
+    return false;
+  }
+  if (masked && !read_exact(fd, mask, 4))
+  {
+    return false;
+  }
+  while (index < length)
+  {
+    unsigned char current = 0U;
+    if (!read_exact(fd, &current, 1))
+    {
+      return false;
+    }
+    if (masked)
+    {
+      current = current ^ mask[index % 4];
+    }
+    output[index] = static_cast<char>(current);
+    index += 1;
+  }
+  output[index] = '\0';
+  return true;
+}
+
+static bool websocket_send_frame(int fd, int opcode, const char* text)
+{
+  unsigned char header[4];
+  const int length = (text != 0) ? static_cast<int>(std::strlen(text)) : 0;
+  int header_length = 0;
+  if (length > 65535)
+  {
+    return false;
+  }
+  header[0] = static_cast<unsigned char>(128 | opcode);
+  if (length < 126)
+  {
+    header[1] = static_cast<unsigned char>(length);
+    header_length = 2;
+  }
+  else
+  {
+    header[1] = 126U;
+    header[2] = static_cast<unsigned char>((length >> 8) & 255);
+    header[3] = static_cast<unsigned char>(length & 255);
+    header_length = 4;
+  }
+  if (write(fd, header, static_cast<unsigned long>(header_length)) <= 0)
+  {
+    return false;
+  }
+  if (length > 0)
+  {
+    return write(fd, text, static_cast<unsigned long>(length)) == length;
+  }
+  return true;
+}
+
+static void latest_user_from_retell_event(const char* event, char* output, int capacity)
+{
+  const char* found = event;
+  clear_buffer(output, capacity);
+  if ((event == 0) || (output == 0))
+  {
+    return;
+  }
+  while ((found = std::strstr(found, "\"content\"")) != 0)
+  {
+    const char* lookback = (found > event + 240) ? (found - 240) : event;
+    char window[260];
+    int index = 0;
+    clear_buffer(window, 260);
+    while ((&lookback[index] < found) && (index < 259))
+    {
+      window[index] = lookback[index];
+      index += 1;
+    }
+    window[index] = '\0';
+    if ((std::strstr(window, "\"role\":\"user\"") != 0) ||
+        (std::strstr(window, "\"role\": \"user\"") != 0) ||
+        (std::strstr(window, "\"speaker\":\"user\"") != 0) ||
+        (std::strstr(window, "\"speaker\": \"user\"") != 0))
+    {
+      (void)json_value(found, "\"content\"", output, capacity);
+    }
+    found += 9;
+  }
+  if (output[0] == '\0')
+  {
+    (void)json_value(event, "\"message\"", output, capacity);
+  }
+}
+
+static void websocket_send_retell_response(int fd, int response_id, const char* content)
+{
+  char response[2048];
+  char id_text[32];
+  clear_buffer(response, 2048);
+  clear_buffer(id_text, 32);
+  snprintf(id_text, sizeof(id_text), "%d", response_id);
+  append_text(response, 2048, "{\"response_type\":\"response\",\"response_id\":");
+  append_text(response, 2048, id_text);
+  append_text(response, 2048, ",\"content\":\"");
+  json_escape_append(response, 2048, content);
+  append_text(response, 2048, "\",\"content_complete\":true,\"end_call\":false}");
+  (void)websocket_send_frame(fd, 1, response);
+}
+
+static void handle_llm_websocket(int fd, const char* request, const Config* config)
+{
+  cerebras_v3::State state;
+  char event[websocket_capacity];
+  char caller_text[text_capacity];
+  char last_assistant[text_capacity];
+  char config_event[256];
+  int opcode = 0;
+  cerebras_v3::init_state(&state);
+  clear_buffer(last_assistant, text_capacity);
+  if (!websocket_handshake(fd, request))
+  {
+    return;
+  }
+  clear_buffer(config_event, 256);
+  append_text(config_event, 256, "{\"response_type\":\"config\",\"config\":{\"auto_reconnect\":false,\"call_details\":true}}");
+  (void)websocket_send_frame(fd, 1, config_event);
+  while (websocket_read_text(fd, event, websocket_capacity, &opcode))
+  {
+    if (opcode == 8)
+    {
+      (void)websocket_send_frame(fd, 8, "");
+      break;
+    }
+    if (opcode == 9)
+    {
+      (void)websocket_send_frame(fd, 10, "");
+    }
+    else if (opcode == 1)
+    {
+      if (contains_text(event, "\"response_required\"") ||
+          contains_text(event, "\"reminder_required\""))
+      {
+        Turn_result result;
+        const int response_id = json_int_value(event, "\"response_id\"", 0);
+        clear_buffer(caller_text, text_capacity);
+        latest_user_from_retell_event(event, caller_text, text_capacity);
+        if (caller_text[0] == '\0')
+        {
+          cerebras_v3::copy_text(caller_text, "hello", text_capacity);
+        }
+        process_chat_turn(&state, config, caller_text, last_assistant, "", &result);
+        websocket_send_retell_response(fd, response_id, result.response_text);
+        cerebras_v3::copy_text(last_assistant, result.response_text, text_capacity);
+      }
+      else if (contains_text(event, "\"ping_pong\""))
+      {
+        (void)websocket_send_frame(fd, 1, "{\"response_type\":\"ping_pong\"}");
+      }
+    }
+  }
 }
 
 static bool authorize(const Config* config, const char* request)
@@ -1162,6 +1648,10 @@ static void handle_connection(int fd, const Config* config)
            starts_with(request, "POST /call-turn"))
   {
     handle_test_chat(fd, request, config);
+  }
+  else if (starts_with(request, "GET /llm-websocket"))
+  {
+    handle_llm_websocket(fd, request, config);
   }
   else
   {
