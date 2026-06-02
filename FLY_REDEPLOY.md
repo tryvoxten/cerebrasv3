@@ -26,7 +26,7 @@ RETELL_SHARED_SECRET=...
 Optional secrets:
 
 ```bash
-CEREBRAS_MODEL=llama3.1-8b
+CEREBRAS_MODEL=gpt-oss-120b
 CEREBRAS_BASE_URL=https://api.cerebras.ai/v1/chat/completions
 EMPLOYEE_DELIVERY_WEBHOOK_URL=https://your-n8n-webhook-url
 EMPLOYEE_DELIVERY_WEBHOOK_SECRET=...

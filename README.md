@@ -20,7 +20,7 @@ planner decides what is missing next.
 ```bash
 export RETELL_SHARED_SECRET=therealtestingsecretforcodex
 export CEREBRAS_API_KEY=...
-export CEREBRAS_MODEL=llama3.1-8b
+export CEREBRAS_MODEL=gpt-oss-120b
 export PORT=8098
 ```
 

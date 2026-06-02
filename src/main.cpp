@@ -354,7 +354,7 @@ static void load_config(char** envp, Config* config)
   clear_buffer(config->delivery_webhook_url, 256);
   clear_buffer(config->delivery_webhook_secret, 128);
   config->cerebras_debug = false;
-  cerebras_v3::copy_text(config->cerebras_model, "llama3.1-8b", 128);
+  cerebras_v3::copy_text(config->cerebras_model, "gpt-oss-120b", 128);
   cerebras_v3::copy_text(config->cerebras_url, "https://api.cerebras.ai/v1/chat/completions", 256);
   value = find_env(envp, "PORT");
   if (value != 0) { config->port = parse_int(value, default_port); }
@@ -490,7 +490,14 @@ static void extract_model_content(const char* response, char* output, int capaci
   }
 }
 
-static bool call_cerebras(const Config* config, const char* system, const char* user, int max_tokens, char* output, int capacity)
+static bool call_cerebras(
+  const Config* config,
+  const char* system,
+  const char* user,
+  int max_tokens,
+  bool json_mode,
+  char* output,
+  int capacity)
 {
   CURL* curl = 0;
   CURLcode code = CURLE_OK;
@@ -519,10 +526,14 @@ static bool call_cerebras(const Config* config, const char* system, const char* 
   append_text(authorization, 320, config->cerebras_key);
   append_text(payload, 4096, "{\"model\":\"");
   json_escape_append(payload, 4096, config->cerebras_model);
-  append_text(payload, 4096, "\",\"stream\":false,\"temperature\":0,\"max_completion_tokens\":");
-  if (max_tokens <= 60) { append_text(payload, 4096, "60"); }
-  else if (max_tokens <= 80) { append_text(payload, 4096, "80"); }
-  else { append_text(payload, 4096, "120"); }
+  append_text(payload, 4096, "\",\"stream\":false,\"temperature\":0,\"reasoning_effort\":\"low\",\"max_completion_tokens\":");
+  if (max_tokens <= 120) { append_text(payload, 4096, "120"); }
+  else if (max_tokens <= 256) { append_text(payload, 4096, "256"); }
+  else { append_text(payload, 4096, "512"); }
+  if (json_mode)
+  {
+    append_text(payload, 4096, ",\"response_format\":{\"type\":\"json_object\"}");
+  }
   append_text(payload, 4096, ",\"messages\":[{\"role\":\"system\",\"content\":\"");
   json_escape_append(payload, 4096, system);
   append_text(payload, 4096, "\"},{\"role\":\"user\",\"content\":\"");
@@ -538,7 +549,7 @@ static bool call_cerebras(const Config* config, const char* system, const char* 
   curl_easy_setopt(curl, CURLOPT_URL, config->cerebras_url);
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
-  curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 1500L);
+  curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
   curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_error);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
@@ -600,7 +611,7 @@ static bool interpret_with_cerebras(
   append_limited(user, 2048, last_assistant, 160);
   append_text(user, 2048, "\nLatest caller: ");
   append_limited(user, 2048, caller, 300);
-  if (!call_cerebras(config, system, user, 80, content, text_capacity))
+  if (!call_cerebras(config, system, user, 512, true, content, text_capacity))
   {
     if ((config != 0) && config->cerebras_debug)
     {
@@ -629,7 +640,7 @@ static bool generate_with_cerebras(const Config* config, const char* state_json,
   append_text(user, 2048, state_json);
   append_text(user, 2048, "\nTask: ");
   append_text(user, 2048, plan->response_task);
-  return call_cerebras(config, system, user, 60, output, capacity);
+  return call_cerebras(config, system, user, 256, false, output, capacity);
 }
 
 static bool should_generate_opening_ack(
@@ -662,10 +673,149 @@ static bool generate_opening_ack_with_cerebras(const Config* config, const char*
   append_text(user, 2048, "Known state: ");
   append_text(user, 2048, state_json);
   append_text(user, 2048, "\nWrite the acknowledgement only.");
-  return call_cerebras(config, system, user, 60, output, capacity);
+  return call_cerebras(config, system, user, 256, false, output, capacity);
 }
 
-static void apply_local_interpretation_fallback(const char* message, cerebras_v3::Interpretation* interpretation)
+static bool is_department_only_reply(const char* lowered)
+{
+  char letters[32];
+  int input = 0;
+  int output = 0;
+  clear_buffer(letters, 32);
+  if (lowered == 0)
+  {
+    return false;
+  }
+  while ((lowered[input] != '\0') && (output < 31))
+  {
+    if (std::isalpha(static_cast<unsigned char>(lowered[input])))
+    {
+      letters[output] = lowered[input];
+      output += 1;
+    }
+    input += 1;
+  }
+  letters[output] = '\0';
+  return
+    (std::strcmp(letters, "service") == 0) ||
+    (std::strcmp(letters, "parts") == 0) ||
+    (std::strcmp(letters, "sales") == 0);
+}
+
+static bool copy_name_reply(const char* message, char* output, int capacity)
+{
+  char cleaned[cerebras_v3::max_text];
+  int input = 0;
+  int out = 0;
+  int word_count = 0;
+  int word_length = 0;
+  bool in_word = false;
+  bool any_letter = false;
+  clear_buffer(cleaned, cerebras_v3::max_text);
+  if ((message == 0) || (output == 0) || (capacity <= 0))
+  {
+    return false;
+  }
+  while ((message[input] != '\0') && (out < (cerebras_v3::max_text - 1)))
+  {
+    const unsigned char c = static_cast<unsigned char>(message[input]);
+    if ((std::isalpha(c) != 0) || (std::isspace(c) != 0) || (message[input] == '\'') || (message[input] == '-'))
+    {
+      cleaned[out] = message[input];
+      out += 1;
+    }
+    input += 1;
+  }
+  while ((out > 0) && std::isspace(static_cast<unsigned char>(cleaned[out - 1])) != 0)
+  {
+    out -= 1;
+  }
+  cleaned[out] = '\0';
+  input = 0;
+  while (cleaned[input] != '\0')
+  {
+    const unsigned char c = static_cast<unsigned char>(cleaned[input]);
+    if (std::isalpha(c) != 0)
+    {
+      any_letter = true;
+      in_word = true;
+      word_length += 1;
+    }
+    else if (std::isspace(c) != 0)
+    {
+      if (in_word)
+      {
+        if (word_length < 2) { return false; }
+        word_count += 1;
+      }
+      in_word = false;
+      word_length = 0;
+    }
+    input += 1;
+  }
+  if (in_word)
+  {
+    if (word_length < 2) { return false; }
+    word_count += 1;
+  }
+  if (!any_letter || (word_count < 1) || (word_count > 4))
+  {
+    return false;
+  }
+  cerebras_v3::copy_text(output, cleaned, capacity);
+  return true;
+}
+
+static bool copy_spelling_reply(const char* message, char* output, int capacity)
+{
+  int input = 0;
+  int out = 0;
+  clear_buffer(output, capacity);
+  if ((message == 0) || (output == 0) || (capacity <= 0))
+  {
+    return false;
+  }
+  while ((message[input] != '\0') && (out < (capacity - 1)))
+  {
+    const unsigned char c = static_cast<unsigned char>(message[input]);
+    if (std::isalpha(c) != 0)
+    {
+      output[out] = static_cast<char>(std::toupper(c));
+      out += 1;
+    }
+    input += 1;
+  }
+  output[out] = '\0';
+  return out >= 2;
+}
+
+static bool copy_phone_reply(const char* message, char* output, int capacity)
+{
+  int input = 0;
+  int out = 0;
+  clear_buffer(output, capacity);
+  if ((message == 0) || (output == 0) || (capacity <= 0))
+  {
+    return false;
+  }
+  while ((message[input] != '\0') && (out < (capacity - 1)))
+  {
+    const unsigned char c = static_cast<unsigned char>(message[input]);
+    if (std::isdigit(c) != 0)
+    {
+      output[out] = message[input];
+      out += 1;
+    }
+    input += 1;
+  }
+  output[out] = '\0';
+  return out >= 7;
+}
+
+static void apply_local_interpretation_fallback(
+  const cerebras_v3::State* state,
+  const char* message,
+  cerebras_v3::Interpretation* interpretation)
 {
   char lowered[text_capacity];
   if ((message == 0) || (interpretation == 0))
@@ -673,6 +823,21 @@ static void apply_local_interpretation_fallback(const char* message, cerebras_v3
     return;
   }
   lowercase_text(lowered, message, text_capacity);
+  if (state != 0)
+  {
+    if ((state->last_requested == cerebras_v3::field_caller_name) && (interpretation->name[0] == '\0'))
+    {
+      copy_name_reply(message, interpretation->name, cerebras_v3::max_text);
+    }
+    else if ((state->last_requested == cerebras_v3::field_last_name_spelling) && (interpretation->spelling[0] == '\0'))
+    {
+      copy_spelling_reply(message, interpretation->spelling, cerebras_v3::max_text);
+    }
+    else if ((state->last_requested == cerebras_v3::field_phone) && (interpretation->phone[0] == '\0'))
+    {
+      copy_phone_reply(message, interpretation->phone, cerebras_v3::max_text);
+    }
+  }
   if (interpretation->department[0] == '\0')
   {
     if (contains_text(lowered, "service") ||
@@ -744,9 +909,7 @@ static void apply_local_interpretation_fallback(const char* message, cerebras_v3
   if ((interpretation->request[0] == '\0') &&
       (interpretation->department[0] != '\0') &&
       (std::strlen(message) > 3U) &&
-      (std::strcmp(lowered, "service") != 0) &&
-      (std::strcmp(lowered, "parts") != 0) &&
-      (std::strcmp(lowered, "sales") != 0))
+      !is_department_only_reply(lowered))
   {
     cerebras_v3::copy_text(interpretation->request, message, cerebras_v3::max_text);
   }
@@ -1162,7 +1325,7 @@ static void process_chat_turn(
   {
     correct_faq_id_from_message(message, &interpretation);
   }
-  apply_local_interpretation_fallback(message, &interpretation);
+  apply_local_interpretation_fallback(state, message, &interpretation);
   if ((config != 0) && config->cerebras_debug)
   {
     std::fprintf(
