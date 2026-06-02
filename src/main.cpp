@@ -497,16 +497,23 @@ static bool call_cerebras(const Config* config, const char* system, const char* 
   struct curl_slist* headers = 0;
   Buffer buffer;
   char authorization[320];
+  char curl_error[CURL_ERROR_SIZE];
   char payload[4096];
+  long http_code = 0;
   bool ok = false;
   clear_buffer(output, capacity);
   if ((config == 0) || (config->cerebras_key[0] == '\0') || (system == 0) || (user == 0))
   {
+    if ((config != 0) && config->cerebras_debug)
+    {
+      std::fprintf(stderr, "CEREBRAS_CALL_SKIPPED missing_config_or_key\n");
+    }
     return false;
   }
   buffer.length = 0;
   clear_buffer(buffer.data, cerebras_capacity);
   clear_buffer(authorization, 320);
+  clear_buffer(curl_error, CURL_ERROR_SIZE);
   clear_buffer(payload, 4096);
   append_text(authorization, 320, "authorization: Bearer ");
   append_text(authorization, 320, config->cerebras_key);
@@ -532,13 +539,29 @@ static bool call_cerebras(const Config* config, const char* system, const char* 
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
   curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 1500L);
+  curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_error);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
   code = curl_easy_perform(curl);
+  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
   if (code == CURLE_OK)
   {
     extract_model_content(buffer.data, output, capacity);
     ok = (output[0] != '\0');
+  }
+  if ((config != 0) && config->cerebras_debug)
+  {
+    char response_sample[512];
+    clear_buffer(response_sample, 512);
+    append_limited(response_sample, 512, buffer.data, 500);
+    std::fprintf(
+      stderr,
+      "CEREBRAS_CALL_DEBUG curl_code=%d http_code=%ld output_len=%lu body=\"%s\" error=\"%s\"\n",
+      static_cast<int>(code),
+      http_code,
+      static_cast<unsigned long>(std::strlen(output)),
+      response_sample,
+      curl_error);
   }
   curl_slist_free_all(headers);
   curl_easy_cleanup(curl);
