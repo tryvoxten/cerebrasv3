@@ -1132,6 +1132,73 @@ static void correct_faq_id_from_message(const char* message, cerebras_v3::Interp
   }
 }
 
+static void append_clean_field(char* output, int capacity, const char* value)
+{
+  char cleaned[text_capacity];
+  int length = 0;
+  clear_buffer(cleaned, text_capacity);
+  if ((value == 0) || (value[0] == '\0'))
+  {
+    return;
+  }
+  cerebras_v3::copy_text(cleaned, value, text_capacity);
+  length = static_cast<int>(std::strlen(cleaned));
+  while ((length > 0) &&
+         ((cleaned[length - 1] == '.') ||
+          (cleaned[length - 1] == ',') ||
+          (cleaned[length - 1] == ';') ||
+          (cleaned[length - 1] == ':') ||
+          (cleaned[length - 1] == ' ') ||
+          (cleaned[length - 1] == '\t')))
+  {
+    cleaned[length - 1] = '\0';
+    length -= 1;
+  }
+  append_text(output, capacity, cleaned);
+}
+
+static void append_final_confirmation(const cerebras_v3::State* state, char* output, int capacity)
+{
+  append_text(output, capacity, "I have you down for ");
+  if (state == 0)
+  {
+    append_text(output, capacity, "the request. Is that correct?");
+    return;
+  }
+  if (state->department == cerebras_v3::department_service)
+  {
+    append_text(output, capacity, "a service request");
+  }
+  else if (state->department == cerebras_v3::department_parts)
+  {
+    append_text(output, capacity, "a parts request");
+  }
+  else if (state->department == cerebras_v3::department_sales)
+  {
+    append_text(output, capacity, "a sales request");
+  }
+  else
+  {
+    append_text(output, capacity, "a request");
+  }
+  if (state->fields[cerebras_v3::field_request].value[0] != '\0')
+  {
+    append_text(output, capacity, " about ");
+    append_clean_field(output, capacity, state->fields[cerebras_v3::field_request].value);
+  }
+  if (state->fields[cerebras_v3::field_callback_time].value[0] != '\0')
+  {
+    append_text(output, capacity, " for ");
+    append_clean_field(output, capacity, state->fields[cerebras_v3::field_callback_time].value);
+  }
+  if (state->fields[cerebras_v3::field_vehicle].value[0] != '\0')
+  {
+    append_text(output, capacity, " with your ");
+    append_clean_field(output, capacity, state->fields[cerebras_v3::field_vehicle].value);
+  }
+  append_text(output, capacity, ". Is that correct?");
+}
+
 static bool template_response(const cerebras_v3::State* state, const cerebras_v3::Plan* plan, char* output, int capacity)
 {
   clear_buffer(output, capacity);
@@ -1181,46 +1248,7 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
       append_text(output, capacity, ". Is that correct?");
       return true;
     case cerebras_v3::field_final_confirmed:
-      append_text(output, capacity, "I have you down for ");
-      if (state != 0)
-      {
-        if (state->department == cerebras_v3::department_service)
-        {
-          append_text(output, capacity, "a service request");
-        }
-        else if (state->department == cerebras_v3::department_parts)
-        {
-          append_text(output, capacity, "a parts request");
-        }
-        else if (state->department == cerebras_v3::department_sales)
-        {
-          append_text(output, capacity, "a sales request");
-        }
-        else
-        {
-          append_text(output, capacity, "a request");
-        }
-        if (state->fields[cerebras_v3::field_callback_time].value[0] != '\0')
-        {
-          append_text(output, capacity, " ");
-          append_text(output, capacity, state->fields[cerebras_v3::field_callback_time].value);
-        }
-        if (state->fields[cerebras_v3::field_vehicle].value[0] != '\0')
-        {
-          append_text(output, capacity, " for your ");
-          append_text(output, capacity, state->fields[cerebras_v3::field_vehicle].value);
-        }
-        if (state->fields[cerebras_v3::field_request].value[0] != '\0')
-        {
-          append_text(output, capacity, " about ");
-          append_text(output, capacity, state->fields[cerebras_v3::field_request].value);
-        }
-      }
-      else
-      {
-        append_text(output, capacity, "the request");
-      }
-      append_text(output, capacity, ". Is that correct?");
+      append_final_confirmation(state, output, capacity);
       return true;
     case cerebras_v3::field_none:
       cerebras_v3::copy_text(output, "Thanks, the team will follow up.", capacity);
