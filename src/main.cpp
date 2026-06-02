@@ -630,6 +630,93 @@ static bool generate_opening_ack_with_cerebras(const Config* config, const char*
   return call_cerebras(config, system, user, 60, output, capacity);
 }
 
+static void apply_local_interpretation_fallback(const char* message, cerebras_v3::Interpretation* interpretation)
+{
+  char lowered[text_capacity];
+  if ((message == 0) || (interpretation == 0))
+  {
+    return;
+  }
+  lowercase_text(lowered, message, text_capacity);
+  if (interpretation->department[0] == '\0')
+  {
+    if (contains_text(lowered, "service") ||
+        contains_text(lowered, "repair") ||
+        contains_text(lowered, "maintenance") ||
+        contains_text(lowered, "diagnostic") ||
+        contains_text(lowered, "recall") ||
+        contains_text(lowered, "warranty") ||
+        contains_text(lowered, "noise") ||
+        contains_text(lowered, "warning") ||
+        contains_text(lowered, "check engine") ||
+        contains_text(lowered, "my car") ||
+        contains_text(lowered, "my vehicle"))
+    {
+      cerebras_v3::copy_text(interpretation->department, "service", 32);
+    }
+    else if (contains_text(lowered, "parts") ||
+             contains_text(lowered, "part ") ||
+             contains_text(lowered, "accessory") ||
+             contains_text(lowered, "wiper") ||
+             contains_text(lowered, "battery") ||
+             contains_text(lowered, "cargo mat") ||
+             contains_text(lowered, "key fob"))
+    {
+      cerebras_v3::copy_text(interpretation->department, "parts", 32);
+    }
+    else if (contains_text(lowered, "sales") ||
+             contains_text(lowered, "buy") ||
+             contains_text(lowered, "lease") ||
+             contains_text(lowered, "test drive") ||
+             contains_text(lowered, "trade in") ||
+             contains_text(lowered, "trade-in") ||
+             contains_text(lowered, "inventory"))
+    {
+      cerebras_v3::copy_text(interpretation->department, "sales", 32);
+    }
+  }
+  if ((interpretation->intent[0] == '\0') && (interpretation->department[0] != '\0'))
+  {
+    if (contains_text(lowered, "noise"))
+    {
+      cerebras_v3::copy_text(interpretation->intent, "vehicle noise", cerebras_v3::max_text);
+    }
+    else if (contains_text(lowered, "maintenance"))
+    {
+      cerebras_v3::copy_text(interpretation->intent, "maintenance", cerebras_v3::max_text);
+    }
+    else if (contains_text(lowered, "recall"))
+    {
+      cerebras_v3::copy_text(interpretation->intent, "recall", cerebras_v3::max_text);
+    }
+    else if (contains_text(lowered, "warranty"))
+    {
+      cerebras_v3::copy_text(interpretation->intent, "warranty question", cerebras_v3::max_text);
+    }
+    else if (contains_text(lowered, "service"))
+    {
+      cerebras_v3::copy_text(interpretation->intent, "service request", cerebras_v3::max_text);
+    }
+    else if (contains_text(lowered, "parts") || contains_text(lowered, "part "))
+    {
+      cerebras_v3::copy_text(interpretation->intent, "parts request", cerebras_v3::max_text);
+    }
+    else if (contains_text(lowered, "sales") || contains_text(lowered, "buy") || contains_text(lowered, "lease"))
+    {
+      cerebras_v3::copy_text(interpretation->intent, "sales request", cerebras_v3::max_text);
+    }
+  }
+  if ((interpretation->request[0] == '\0') &&
+      (interpretation->department[0] != '\0') &&
+      (std::strlen(message) > 3U) &&
+      (std::strcmp(lowered, "service") != 0) &&
+      (std::strcmp(lowered, "parts") != 0) &&
+      (std::strcmp(lowered, "sales") != 0))
+  {
+    cerebras_v3::copy_text(interpretation->request, message, cerebras_v3::max_text);
+  }
+}
+
 static void build_employee_summary_json(const cerebras_v3::State* state, char* output, int capacity)
 {
   clear_buffer(output, capacity);
@@ -1039,8 +1126,9 @@ static void process_chat_turn(
   if (result->used_interpreter)
   {
     correct_faq_id_from_message(message, &interpretation);
-    cerebras_v3::merge_interpretation(state, &interpretation, message);
   }
+  apply_local_interpretation_fallback(message, &interpretation);
+  cerebras_v3::merge_interpretation(state, &interpretation, message);
   previous_requested = state->last_requested;
   plan = cerebras_v3::plan_next(state);
   state->last_requested = plan.next_field;
