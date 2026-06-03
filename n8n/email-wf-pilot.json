@@ -1,0 +1,288 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voxten/v1/employee-delivery/ffd9896f1145e46e9fb70300eee7f73240213204/opa/summary",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -64,
+        304
+      ],
+      "id": "48f0194d-71d6-4fe3-be39-a5db1218d74d",
+      "name": "Webhook",
+      "webhookId": "615d9904-ab99-4b92-9f59-f8ed7c82592b"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fa3f19db-9a6a-4bee-9523-ba9bc756f84d",
+                    "leftValue": "={{$json.body.department}}",
+                    "rightValue": "service",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "service"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "207c94f5-cad3-48dc-92e0-fccd145827c2",
+                    "leftValue": "={{$json.body.department}}",
+                    "rightValue": "parts",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "parts"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "661cb0c6-e73a-4044-af1b-b2d7b4f08ae6",
+                    "leftValue": "={{$json.body.department}}",
+                    "rightValue": "sales",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sales"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        208,
+        288
+      ],
+      "id": "80ad6130-1e7a-4745-b611-22bb26869386",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "sendTo": "tryvoxten@gmail.com",
+        "subject": "=After Hours – SERVICE – {{$json.body.caller_name}}",
+        "message": "=<h2>After-Hours Service Callback</h2>\n<table style=\"font-family:Arial,sans-serif;font-size:14px;border-collapse:collapse;width:100%\">\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold;width:180px\">Caller Name</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.caller_name}} ({{$json.body.last_name_spelling}})</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Phone</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.phone}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Vehicle</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.vehicle}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Issue</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.request}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Callback Time</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.callback_time}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Summary</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.summary}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Confirmed</td><td style=\"padding:8px\">{{$json.body.final_confirmed ? \"Yes\" : \"No\"}}</td></tr>\n</table>\n<br><p style=\"font-family:Arial,sans-serif;font-size:12px;color:#888\">Sent by Voxten after-hours system</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        384,
+        160
+      ],
+      "id": "35bbe569-b0ab-442c-8811-1b7626d24a90",
+      "name": "Send a message1",
+      "webhookId": "35f0230b-8b20-44f3-91fb-dfbb10842e35"
+    },
+    {
+      "parameters": {
+        "sendTo": "tryvoxten@gmail.com",
+        "subject": "=After Hours – PARTS – {{$json.body.caller_name}}",
+        "message": "=<h2>After-Hours Service Callback</h2>\n<table style=\"font-family:Arial,sans-serif;font-size:14px;border-collapse:collapse;width:100%\">\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold;width:180px\">Caller Name</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.caller_name}} ({{$json.body.last_name_spelling}})</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Phone</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.phone}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Vehicle</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.vehicle}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Part Needed</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.request}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Callback Time</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.callback_time}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Summary</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.summary}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Confirmed</td><td style=\"padding:8px\">{{$json.body.final_confirmed ? \"Yes\" : \"No\"}}</td></tr>\n</table>\n<br><p style=\"font-family:Arial,sans-serif;font-size:12px;color:#888\">Sent by Voxten after-hours system</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        384,
+        288
+      ],
+      "id": "fe59a0e9-5750-452d-8258-cc944fb1775a",
+      "name": "Send a message",
+      "webhookId": "35f0230b-8b20-44f3-91fb-dfbb10842e35"
+    },
+    {
+      "parameters": {
+        "sendTo": "tryvoxten@gmail.com",
+        "subject": "=After Hours – Sales – {{$json.body.caller_name}}",
+        "message": "=<h2>After-Hours Service Callback</h2>\n<table style=\"font-family:Arial,sans-serif;font-size:14px;border-collapse:collapse;width:100%\">\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold;width:180px\">Caller Name</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.caller_name}} ({{$json.body.last_name_spelling}})</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Phone</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.phone}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Vehicle</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.vehicle}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Interest</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.request}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Callback Time</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.callback_time}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Summary</td><td style=\"padding:8px;border-bottom:1px solid #eee\">{{$json.body.summary}}</td></tr>\n  <tr><td style=\"padding:8px;background:#f5f5f5;font-weight:bold\">Confirmed</td><td style=\"padding:8px\">{{$json.body.final_confirmed ? \"Yes\" : \"No\"}}</td></tr>\n</table>\n<br><p style=\"font-family:Arial,sans-serif;font-size:12px;color:#888\">Sent by Voxten after-hours system</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        384,
+        432
+      ],
+      "id": "ff9c1e56-104e-40f6-b523-034a058443f9",
+      "name": "Send a message2",
+      "webhookId": "35f0230b-8b20-44f3-91fb-dfbb10842e35"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3b0cfc14-78d8-4fb5-8d85-ea0cb5bb3102",
+              "leftValue": "={{ $json.headers['x-voxten-secret'] }}",
+              "rightValue": "REPLACE_WITH_EMPLOYEE_DELIVERY_WEBHOOK_SECRET",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "d6194141-26b8-4498-a2f7-3996e5b186eb",
+              "leftValue": "={{ $json.headers['x-voxten-secret'] }}",
+              "rightValue": "REPLACE_WITH_EMPLOYEE_DELIVERY_WEBHOOK_SECRET",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        64,
+        416
+      ],
+      "id": "ca3fea73-cf4f-458f-b084-52ee35129a49",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "errorMessage": "unauthorized access"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        192,
+        560
+      ],
+      "id": "cfa6a95d-1386-4e95-84dc-150cfda0d767",
+      "name": "Stop and Error"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop and Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c5c077895497acffc12af583996396a0eae127619b5999834bb226e7a2011885"
+  },
+  "tags": []
+}
