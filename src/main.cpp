@@ -155,6 +155,55 @@ static void json_escape_append(char* output, int capacity, const char* text)
   }
 }
 
+static const char* json_bool(bool value)
+{
+  return value ? "true" : "false";
+}
+
+static void append_json_string_field(char* output, int capacity, const char* name, const char* value)
+{
+  append_text(output, capacity, ",\"");
+  append_text(output, capacity, name);
+  append_text(output, capacity, "\":\"");
+  json_escape_append(output, capacity, (value != 0) ? value : "");
+  append_text(output, capacity, "\"");
+}
+
+static void append_json_bool_field(char* output, int capacity, const char* name, bool value)
+{
+  append_text(output, capacity, ",\"");
+  append_text(output, capacity, name);
+  append_text(output, capacity, "\":");
+  append_text(output, capacity, json_bool(value));
+}
+
+static void append_json_int_field(char* output, int capacity, const char* name, long value)
+{
+  char number[32];
+  clear_buffer(number, 32);
+  snprintf(number, sizeof(number), "%ld", value);
+  append_text(output, capacity, ",\"");
+  append_text(output, capacity, name);
+  append_text(output, capacity, "\":");
+  append_text(output, capacity, number);
+}
+
+static void log_json_line(const char* event, const char* call_id, const char* extra)
+{
+  char line[2048];
+  clear_buffer(line, 2048);
+  append_text(line, 2048, "{\"event\":\"");
+  json_escape_append(line, 2048, (event != 0) ? event : "unknown");
+  append_text(line, 2048, "\"");
+  append_json_string_field(line, 2048, "call_id", (call_id != 0) ? call_id : "");
+  if ((extra != 0) && (extra[0] != '\0'))
+  {
+    append_text(line, 2048, extra);
+  }
+  append_text(line, 2048, "}");
+  std::fprintf(stderr, "%s\n", line);
+}
+
 static void copy_limited(char* destination, const char* source, int capacity, int max_chars)
 {
   int index = 0;
@@ -1010,6 +1059,8 @@ static bool deliver_employee_summary(const Config* config, const char* summary_j
   CURLcode code = CURLE_OK;
   struct curl_slist* headers = 0;
   Buffer buffer;
+  char call_id[64];
+  char extra[512];
   char secret_header[192];
   long status = 0L;
   bool ok = false;
@@ -1022,9 +1073,16 @@ static bool deliver_employee_summary(const Config* config, const char* summary_j
   }
   buffer.length = 0;
   clear_buffer(buffer.data, cerebras_capacity);
+  clear_buffer(call_id, 64);
+  clear_buffer(extra, 512);
+  (void)json_value(summary_json, "\"call_id\"", call_id, 64);
   curl = curl_easy_init();
   if (curl == 0)
   {
+    append_json_bool_field(extra, 512, "configured", true);
+    append_json_bool_field(extra, 512, "sent", false);
+    append_json_string_field(extra, 512, "error", "curl_init_failed");
+    log_json_line("employee_delivery", call_id, extra);
     return false;
   }
   headers = curl_slist_append(headers, "content-type: application/json");
@@ -1047,8 +1105,13 @@ static bool deliver_employee_summary(const Config* config, const char* summary_j
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     ok = (status >= 200L) && (status < 300L);
   }
+  append_json_bool_field(extra, 512, "configured", true);
+  append_json_int_field(extra, 512, "http_status", status);
+  append_json_int_field(extra, 512, "curl_code", static_cast<long>(code));
+  append_json_bool_field(extra, 512, "sent", ok);
   curl_slist_free_all(headers);
   curl_easy_cleanup(curl);
+  log_json_line("employee_delivery", call_id, extra);
   return ok;
 }
 
@@ -1372,6 +1435,33 @@ static void clear_turn_result(Turn_result* result)
   result->delivery_sent = false;
 }
 
+static void log_turn_processed(
+  const char* source,
+  const cerebras_v3::State* state,
+  const Turn_result* result,
+  const char* message)
+{
+  char extra[1024];
+  clear_buffer(extra, 1024);
+  append_json_string_field(extra, 1024, "source", source);
+  append_json_string_field(
+    extra,
+    1024,
+    "department",
+    (state != 0) ? cerebras_v3::department_name(state->department) : "unknown");
+  append_json_string_field(extra, 1024, "next_field", (result != 0) ? result->next_field : "");
+  append_json_string_field(extra, 1024, "faq_id", (result != 0) ? result->faq_id : "");
+  append_json_bool_field(extra, 1024, "message_present", (message != 0) && (message[0] != '\0'));
+  append_json_int_field(extra, 1024, "message_chars", (message != 0) ? static_cast<long>(std::strlen(message)) : 0L);
+  append_json_bool_field(extra, 1024, "used_interpreter", (result != 0) && result->used_interpreter);
+  append_json_bool_field(extra, 1024, "used_generator", (result != 0) && result->used_generator);
+  append_json_bool_field(extra, 1024, "used_kb_answer", (result != 0) && result->used_kb_answer);
+  append_json_bool_field(extra, 1024, "delivery_attempted", (result != 0) && result->delivery_attempted);
+  append_json_bool_field(extra, 1024, "delivery_sent", ((state != 0) && state->delivery_sent) || ((result != 0) && result->delivery_sent));
+  append_json_bool_field(extra, 1024, "has_employee_summary", (result != 0) && (result->employee_summary[0] != '\0'));
+  log_json_line("turn_processed", (state != 0) ? state->call_id : "", extra);
+}
+
 static void process_chat_turn(
   cerebras_v3::State* state,
   const Config* config,
@@ -1535,6 +1625,7 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
   set_call_id_if_present(&state, request);
   ensure_call_id(&state);
   process_chat_turn(&state, config, message, last_assistant, recent_context, &result);
+  log_turn_processed("http", &state, &result, message);
   append_text(body, response_capacity, "{\"model\":\"cerebras-v3\",");
   append_text(body, response_capacity, "\"call_id\":\"");
   json_escape_append(body, response_capacity, state.call_id);
@@ -1964,11 +2055,13 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
   clear_buffer(last_assistant, text_capacity);
   if (!websocket_handshake(fd, request))
   {
+    log_json_line("websocket_handshake_failed", "", "");
     return;
   }
   clear_buffer(config_event, 256);
   append_text(config_event, 256, "{\"response_type\":\"config\",\"config\":{\"auto_reconnect\":false,\"call_details\":true}}");
   (void)websocket_send_frame(fd, 1, config_event);
+  log_json_line("websocket_open", "", "");
   while (websocket_read_text(fd, event, websocket_capacity, &opcode))
   {
     if (opcode == 8)
@@ -1995,8 +2088,23 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
         }
         set_call_id_if_present(&state, event);
         ensure_call_id(&state);
+        {
+          char extra[128];
+          clear_buffer(extra, 128);
+          append_json_int_field(extra, 128, "response_id", static_cast<long>(response_id));
+          append_json_string_field(extra, 128, "trigger", contains_text(event, "\"reminder_required\"") ? "reminder_required" : "response_required");
+          log_json_line("websocket_response_required", state.call_id, extra);
+        }
         process_chat_turn(&state, config, caller_text, last_assistant, "", &result);
+        log_turn_processed("websocket", &state, &result, caller_text);
         websocket_send_retell_response(fd, response_id, state.call_id, result.response_text);
+        {
+          char extra[128];
+          clear_buffer(extra, 128);
+          append_json_int_field(extra, 128, "response_id", static_cast<long>(response_id));
+          append_json_int_field(extra, 128, "response_chars", static_cast<long>(std::strlen(result.response_text)));
+          log_json_line("websocket_response_sent", state.call_id, extra);
+        }
         cerebras_v3::copy_text(last_assistant, result.response_text, text_capacity);
       }
       else if (contains_text(event, "\"ping_pong\""))
@@ -2005,6 +2113,7 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
       }
     }
   }
+  log_json_line("websocket_close", state.call_id, "");
 }
 
 static bool authorize(const Config* config, const char* request)
@@ -2033,6 +2142,7 @@ static void handle_connection(int fd, const Config* config)
   }
   else if (!authorize(config, request))
   {
+    log_json_line("http_unauthorized", "", "");
     http_json(fd, 404, "{\"error\":\"unauthorized\"}");
   }
   else if (starts_with(request, "POST /test-chat") ||
@@ -2047,6 +2157,7 @@ static void handle_connection(int fd, const Config* config)
   }
   else
   {
+    log_json_line("http_not_found", "", "");
     http_json(fd, 404, "{\"error\":\"not_found\"}");
   }
   close(fd);

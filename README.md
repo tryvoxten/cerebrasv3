@@ -71,6 +71,48 @@ callback time, and phone number. If `EMPLOYEE_DELIVERY_WEBHOOK_URL` is set, the
 service posts that summary to the webhook once and stores `delivery_sent` in the
 returned state to prevent duplicate delivery.
 
+## Debugging
+
+The app writes low-PII JSON debug events to stderr, which show up in Fly logs.
+Search by `call_id` to trace a full call:
+
+```bash
+flyctl logs --app voxten-cerebras-v3
+```
+
+Key events:
+
+```text
+websocket_open
+websocket_response_required
+turn_processed
+websocket_response_sent
+employee_delivery
+websocket_close
+http_unauthorized
+http_not_found
+```
+
+`turn_processed` shows the source (`http` or `websocket`), chosen department,
+next field, whether the interpreter/generator/KB answer ran, and whether
+employee delivery was attempted. It does not log the raw caller transcript by
+default.
+
+`employee_delivery` shows the n8n handoff result, including `http_status`,
+`curl_code`, and `sent`.
+
+For temporary deeper model debugging:
+
+```bash
+flyctl secrets set CEREBRAS_DEBUG=1 --app voxten-cerebras-v3
+```
+
+Turn it back off after testing because it can log raw model/interpreter details:
+
+```bash
+flyctl secrets unset CEREBRAS_DEBUG --app voxten-cerebras-v3
+```
+
 ## n8n Employee Email Delivery
 
 The app connects to n8n with a regular HTTPS webhook. No websocket is required.
