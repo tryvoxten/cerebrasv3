@@ -46,6 +46,7 @@ struct Field
 
 struct State
 {
+  char call_id[64];
   Department department;
   Field fields[10];
   Field_id last_requested;

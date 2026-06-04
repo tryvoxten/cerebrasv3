@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 namespace
 {
@@ -53,6 +54,8 @@ struct Turn_result
   bool delivery_attempted;
   bool delivery_sent;
 };
+
+static bool json_value(const char* json, const char* key, char* output, int capacity);
 
 static void clear_buffer(char* buffer, int capacity)
 {
@@ -919,6 +922,9 @@ static void build_employee_summary_json(const cerebras_v3::State* state, char* o
 {
   clear_buffer(output, capacity);
   append_text(output, capacity, "{\"event\":\"call_summary_ready\"");
+  append_text(output, capacity, ",\"call_id\":\"");
+  json_escape_append(output, capacity, (state != 0) ? state->call_id : "");
+  append_text(output, capacity, "\"");
   append_text(output, capacity, ",\"department\":\"");
   json_escape_append(output, capacity, (state != 0) ? cerebras_v3::department_name(state->department) : "unknown");
   append_text(output, capacity, "\"");
@@ -960,6 +966,42 @@ static void build_employee_summary_json(const cerebras_v3::State* state, char* o
   append_text(output, capacity, ",\"final_confirmed\":");
   append_text(output, capacity, ((state != 0) && state->fields[cerebras_v3::field_final_confirmed].confirmed) ? "true" : "false");
   append_text(output, capacity, "}");
+}
+
+static void ensure_call_id(cerebras_v3::State* state)
+{
+  static int counter = 0;
+  char generated[64];
+  if ((state == 0) || (state->call_id[0] != '\0'))
+  {
+    return;
+  }
+  clear_buffer(generated, 64);
+  counter += 1;
+  snprintf(
+    generated,
+    sizeof(generated),
+    "local-%ld-%d",
+    static_cast<long>(std::time(0)),
+    counter);
+  cerebras_v3::copy_text(state->call_id, generated, 64);
+}
+
+static void set_call_id_if_present(cerebras_v3::State* state, const char* source)
+{
+  char call_id[64];
+  if ((state == 0) || (source == 0) || (state->call_id[0] != '\0'))
+  {
+    return;
+  }
+  clear_buffer(call_id, 64);
+  if (json_value(source, "\"call_id\"", call_id, 64) ||
+      json_value(source, "\"callId\"", call_id, 64) ||
+      json_value(source, "\"call_uuid\"", call_id, 64) ||
+      json_value(source, "\"retell_call_id\"", call_id, 64))
+  {
+    cerebras_v3::copy_text(state->call_id, call_id, 64);
+  }
 }
 
 static bool deliver_employee_summary(const Config* config, const char* summary_json)
@@ -1490,8 +1532,13 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
   {
     cerebras_v3::load_state_from_json(&state, state_input);
   }
+  set_call_id_if_present(&state, request);
+  ensure_call_id(&state);
   process_chat_turn(&state, config, message, last_assistant, recent_context, &result);
   append_text(body, response_capacity, "{\"model\":\"cerebras-v3\",");
+  append_text(body, response_capacity, "\"call_id\":\"");
+  json_escape_append(body, response_capacity, state.call_id);
+  append_text(body, response_capacity, "\",");
   append_text(body, response_capacity, "\"used_interpreter\":");
   append_text(body, response_capacity, result.used_interpreter ? "true" : "false");
   append_text(body, response_capacity, ",\"used_generator\":");
@@ -1887,7 +1934,7 @@ static void latest_user_from_retell_event(const char* event, char* output, int c
   }
 }
 
-static void websocket_send_retell_response(int fd, int response_id, const char* content)
+static void websocket_send_retell_response(int fd, int response_id, const char* call_id, const char* content)
 {
   char response[2048];
   char id_text[32];
@@ -1896,6 +1943,9 @@ static void websocket_send_retell_response(int fd, int response_id, const char* 
   snprintf(id_text, sizeof(id_text), "%d", response_id);
   append_text(response, 2048, "{\"response_type\":\"response\",\"response_id\":");
   append_text(response, 2048, id_text);
+  append_text(response, 2048, ",\"call_id\":\"");
+  json_escape_append(response, 2048, (call_id != 0) ? call_id : "");
+  append_text(response, 2048, "\"");
   append_text(response, 2048, ",\"content\":\"");
   json_escape_append(response, 2048, content);
   append_text(response, 2048, "\",\"content_complete\":true,\"end_call\":false}");
@@ -1943,8 +1993,10 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
         {
           cerebras_v3::copy_text(caller_text, "hello", text_capacity);
         }
+        set_call_id_if_present(&state, event);
+        ensure_call_id(&state);
         process_chat_turn(&state, config, caller_text, last_assistant, "", &result);
-        websocket_send_retell_response(fd, response_id, result.response_text);
+        websocket_send_retell_response(fd, response_id, state.call_id, result.response_text);
         cerebras_v3::copy_text(last_assistant, result.response_text, text_capacity);
       }
       else if (contains_text(event, "\"ping_pong\""))

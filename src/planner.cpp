@@ -513,6 +513,7 @@ void init_state(State* state)
   {
     return;
   }
+  clear_text(state->call_id);
   state->department = department_unknown;
   state->last_requested = field_none;
   state->delivery_sent = false;
@@ -986,7 +987,9 @@ void state_to_json(const State* state, char* output, int capacity)
 {
   clear_text(output);
   append(output, capacity, "{");
-  append(output, capacity, "\"department\":");
+  append(output, capacity, "\"call_id\":");
+  append_json_string(output, capacity, (state != 0) ? state->call_id : "");
+  append(output, capacity, ",\"department\":");
   append_json_string(output, capacity, (state != 0) ? department_name(state->department) : "unknown");
   append(output, capacity, ",\"intent\":");
   append_json_string(output, capacity, (state != 0) ? state->fields[field_intent].value : "");
@@ -1025,6 +1028,10 @@ void load_state_from_json(State* state, const char* json)
   if (json == 0)
   {
     return;
+  }
+  if (json_value(json, "\"call_id\"", value, max_text))
+  {
+    copy_text(state->call_id, value, 64);
   }
   if (json_value(json, "\"department\"", value, max_text))
   {

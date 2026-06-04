@@ -45,11 +45,14 @@ make check
 curl -sS http://127.0.0.1:8098/test-chat \
   -H "authorization: Bearer therealtestingsecretforcodex" \
   -H "content-type: application/json" \
-  -d '{"message":"my dash is yelling maintenance at me","state":{}}'
+  -d '{"call_id":"manual-test-001","message":"my dash is yelling maintenance at me","state":{}}'
 ```
 
 The response includes the updated state, chosen next field, whether Cerebras was
-used for interpretation/response, and the caller-facing content.
+used for interpretation/response, the stable `call_id`, and the caller-facing
+content. If the caller platform sends `call_id`, `callId`, `call_uuid`, or
+`retell_call_id`, the app preserves it. Otherwise it generates a local call ID
+and stores it in `state.call_id`.
 
 Production turn endpoints:
 
@@ -92,6 +95,7 @@ With this JSON body:
 ```json
 {
   "event": "call_summary_ready",
+  "call_id": "call_abc123",
   "department": "service",
   "summary": "After-hours service callback request for Jordan Smith about truck warning light.",
   "caller_name": "Jordan Smith",
