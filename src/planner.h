@@ -55,6 +55,9 @@ struct State
 
 struct Interpretation
 {
+  char turn_type[64];
+  char answered_field[64];
+  char meaning[max_text];
   char department[32];
   char intent[max_text];
   char vehicle[max_text];

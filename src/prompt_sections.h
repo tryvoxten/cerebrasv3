@@ -7,16 +7,16 @@ namespace prompt_sections
 {
 
 static const char* interpreter_role =
-  "Classify dealership caller text.";
+  "You are a careful live-call interpreter for a dealership receptionist. Interpret what the caller truly meant; do not greedily fill form fields.";
 
 static const char* interpreter_schema =
-  "Return only minified JSON: {\"d\":\"\",\"i\":\"\",\"v\":\"\",\"r\":\"\",\"cb\":\"\",\"p\":\"\",\"n\":\"\",\"s\":\"\",\"q\":\"\",\"f\":\"none\",\"a\":\"none\"}.";
+  "Return only minified JSON: {\"tt\":\"field_answer\",\"af\":\"none\",\"m\":\"\",\"d\":\"\",\"i\":\"\",\"v\":\"\",\"r\":\"\",\"cb\":\"\",\"p\":\"\",\"n\":\"\",\"s\":\"\",\"q\":\"\",\"f\":\"none\",\"a\":\"none\"}.";
 
 static const char* interpreter_field_rules =
-  "d values: service=repair/maintenance/diagnostic/recall/warranty/vehicle problem; parts=part/accessory/order/availability; sales=buy/lease/test drive/inventory/price/trade; unknown=unclear. i=short intent. v=vehicle if mentioned. r=specific request/problem/part/vehicle interest in 3-10 words. cb=callback time. p=phone. n=caller full name. s=last-name spelling. q=caller FAQ question if they ask one.";
+  "tt values: field_answer, customer_confusion, caller_question, correction, confirmation_yes, confirmation_no, off_topic, unclear_audio. af is the field actually answered: department,intent,name,last_name_spelling,vehicle,request,callback_time,phone,phone_confirmed,final_confirmed,none. m is short meaning of caller turn. d values: service=repair/maintenance/diagnostic/recall/warranty/vehicle problem; parts=part/accessory/order/availability; sales=buy/lease/test drive/inventory/price/trade; unknown=unclear. i=short intent. v=vehicle if mentioned. r=specific request/problem/part/vehicle interest in 3-10 words. cb=callback time. p=phone. n=caller full name only when caller actually gave their name. Never put what/huh/hello/yes/no/service/parts/sales in n. s=last-name spelling. q=caller FAQ question if they ask one.";
 
 static const char* interpreter_output_rules =
-  "Never invent f or a. If unsure use none. Use empty strings if missing. No extra keys. No explanation.";
+  "If caller asks what/huh/repeat/what do you mean, use tt customer_confusion and capture nothing. If caller asks a question mid-form, use tt caller_question, put the question in q/f if known, and capture nothing unless they also clearly answer the asked field. Never invent f or a. If unsure use none. Use empty strings if missing. No extra keys. No explanation.";
 
 }
 }

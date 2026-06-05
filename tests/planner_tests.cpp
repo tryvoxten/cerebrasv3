@@ -74,7 +74,7 @@ static void parses_compact_json(void)
 
 static void prompt_sections_include_closed_labels(void)
 {
-  expect_true(std::strstr(cerebras_v3::prompt_sections::interpreter_role, "Classify dealership") != 0, "prompt role included");
+  expect_true(std::strstr(cerebras_v3::prompt_sections::interpreter_role, "live-call interpreter") != 0, "prompt role included");
   expect_true(std::strstr(cerebras_v3::prompt_sections::interpreter_schema, "\"a\":\"none\"") != 0, "prompt schema includes affirmation");
   expect_true(std::strstr(cerebras_v3::prompt_sections::interpreter_field_rules, "last-name spelling") != 0, "prompt includes field rules");
   expect_true(std::strstr(cerebras_v3::generated_kb::interpreter_faq_rules, "recall_service") != 0, "prompt includes recall faq id");
@@ -379,6 +379,87 @@ static void requested_name_is_captured(void)
   expect_true(plan.next_field != cerebras_v3::field_caller_name, "requested name advances");
 }
 
+static void interpreter_confusion_captures_nothing(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "service");
+  state.last_requested = cerebras_v3::field_caller_name;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "customer_confusion", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "none", 64);
+  cerebras_v3::copy_text(interpretation.name, "what", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "what");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(state.fields[cerebras_v3::field_caller_name].status == cerebras_v3::status_missing, "confusion does not capture name");
+  expect_true(plan.next_field == cerebras_v3::field_caller_name, "confusion reasks current field");
+}
+
+static void caller_question_mid_form_captures_nothing(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "service");
+  state.last_requested = cerebras_v3::field_caller_name;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "caller_question", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "none", 64);
+  cerebras_v3::copy_text(interpretation.faq_question, "are you open tomorrow", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "open tomorrow", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "are you open tomorrow?");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(state.fields[cerebras_v3::field_caller_name].status == cerebras_v3::status_missing, "caller question does not capture name");
+  expect_true(plan.next_field == cerebras_v3::field_caller_name, "caller question keeps current field");
+}
+
+static void caller_question_during_request_captures_nothing(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Sam Patel", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "P A T E L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "Toyota Camry", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "setup");
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.last_requested = cerebras_v3::field_request;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "caller_question", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "none", 64);
+  cerebras_v3::copy_text(interpretation.faq_question, "how late are you open", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "how late are you open", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "how late are you open?");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(state.fields[cerebras_v3::field_request].status == cerebras_v3::status_missing, "caller question does not capture request");
+  expect_true(plan.next_field == cerebras_v3::field_request, "caller question keeps request field");
+}
+
+static void parses_interpreter_turn_type(void)
+{
+  cerebras_v3::Interpretation interpretation;
+  const char* json =
+    "{\"tt\":\"customer_confusion\",\"af\":\"none\",\"m\":\"caller asks what the agent means\",\"d\":\"\",\"i\":\"\",\"v\":\"\",\"r\":\"\",\"cb\":\"\",\"p\":\"\",\"n\":\"\",\"s\":\"\",\"q\":\"\",\"f\":\"none\",\"a\":\"none\"}";
+  const bool ok = cerebras_v3::parse_interpretation_json(json, &interpretation);
+  expect_true(ok, "turn type json parses");
+  expect_true(std::strcmp(interpretation.turn_type, "customer_confusion") == 0, "turn type parsed");
+  expect_true(std::strcmp(interpretation.answered_field, "none") == 0, "answered field parsed");
+  expect_true(std::strcmp(interpretation.meaning, "caller asks what the agent means") == 0, "meaning parsed");
+}
+
 static void precursor_name_is_captured(void)
 {
   cerebras_v3::State state;
@@ -516,6 +597,10 @@ int main(void)
   normalized_vehicle_names_are_captured();
   sales_opening_does_not_capture_name();
   requested_name_is_captured();
+  interpreter_confusion_captures_nothing();
+  caller_question_mid_form_captures_nothing();
+  caller_question_during_request_captures_nothing();
+  parses_interpreter_turn_type();
   precursor_name_is_captured();
   non_name_precursor_does_not_capture_name();
   warranty_sentence_does_not_capture_spelling();

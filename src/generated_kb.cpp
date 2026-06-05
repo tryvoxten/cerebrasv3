@@ -10,7 +10,7 @@ const Faq_entry faq_entries[] =
   { "recall_service", "recall, manufacturer recall, open recall, recall notice", "The service team can help review recall concerns and confirm next steps when they call back." },
   { "warranty_service", "warranty, manufacturer warranty, warranty coverage", "The service team can review warranty questions and confirm what applies when they call back." },
   { "ev_battery_service", "EV battery, high-voltage battery, electric car battery warning", "The service team can review EV battery concerns and confirm next steps when they call back." },
-  { "service_hours", "service hours, when service opens or closes, service department schedule", "The team can confirm current service hours when they call back." },
+  { "service_hours", "service hours, when service opens or closes, service department schedule", "Service hours are 9 AM to 5 PM." },
   { "parts_availability", "whether a part can be checked or is available", "The parts team can check availability and confirm options when they call back." },
   { "parts_order_status", "already ordered part status, ordered part arrival, parts order update", "The parts team can review order status and follow up with the latest update." },
   { "sales_inventory", "in stock, on the lot, available vehicles, current inventory", "The sales team can confirm current inventory and follow up with available options." },

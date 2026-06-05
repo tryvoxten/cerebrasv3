@@ -527,6 +527,9 @@ void clear_interpretation(Interpretation* interpretation)
 {
   if (interpretation != 0)
   {
+    clear_text(interpretation->turn_type);
+    clear_text(interpretation->answered_field);
+    clear_text(interpretation->meaning);
     clear_text(interpretation->department);
     clear_text(interpretation->intent);
     clear_text(interpretation->vehicle);
@@ -539,6 +542,23 @@ void clear_interpretation(Interpretation* interpretation)
     clear_text(interpretation->faq_id);
     clear_text(interpretation->affirmation);
   }
+}
+
+static bool is_turn_type(const Interpretation* interpretation, const char* turn_type)
+{
+  return
+    (interpretation != 0) &&
+    (turn_type != 0) &&
+    (std::strcmp(interpretation->turn_type, turn_type) == 0);
+}
+
+static bool should_skip_capture_for_turn(const Interpretation* interpretation)
+{
+  return
+    is_turn_type(interpretation, "customer_confusion") ||
+    is_turn_type(interpretation, "caller_question") ||
+    is_turn_type(interpretation, "off_topic") ||
+    is_turn_type(interpretation, "unclear_audio");
 }
 
 static Department department_from_text(const char* text)
@@ -588,6 +608,10 @@ void merge_interpretation(State* state, const Interpretation* interpretation, co
   {
     state->fields[field_final_confirmed].status = status_captured;
     state->fields[field_final_confirmed].confirmed = true;
+    return;
+  }
+  if (should_skip_capture_for_turn(interpretation))
+  {
     return;
   }
   department = department_from_text(interpretation->department);
@@ -922,6 +946,12 @@ bool parse_interpretation_json(const char* json, Interpretation* interpretation)
     return false;
   }
   clear_interpretation(interpretation);
+  found = (json_value(json, "\"turn_type\"", interpretation->turn_type, 64) ||
+           json_value(json, "\"tt\"", interpretation->turn_type, 64)) || found;
+  found = (json_value(json, "\"answered_field\"", interpretation->answered_field, 64) ||
+           json_value(json, "\"af\"", interpretation->answered_field, 64)) || found;
+  found = (json_value(json, "\"meaning\"", interpretation->meaning, max_text) ||
+           json_value(json, "\"m\"", interpretation->meaning, max_text)) || found;
   has_department = json_value(json, "\"d\"", interpretation->department, 32);
   has_intent = json_value(json, "\"i\"", interpretation->intent, max_text);
   has_request = json_value(json, "\"r\"", interpretation->request, max_text);
