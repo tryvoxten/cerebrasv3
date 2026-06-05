@@ -452,6 +452,39 @@ static bool looks_like_person_name(const char* text)
   return any_letter && (word_count >= 1) && (word_count <= 4);
 }
 
+static int person_name_word_count(const char* text)
+{
+  int index = 0;
+  int word_count = 0;
+  bool in_word = false;
+  if (text == 0)
+  {
+    return 0;
+  }
+  while (text[index] != '\0')
+  {
+    const unsigned char c = static_cast<unsigned char>(text[index]);
+    if (std::isalpha(c) != 0)
+    {
+      in_word = true;
+    }
+    else
+    {
+      if (in_word)
+      {
+        word_count += 1;
+      }
+      in_word = false;
+    }
+    index += 1;
+  }
+  if (in_word)
+  {
+    word_count += 1;
+  }
+  return word_count;
+}
+
 static bool should_capture_name(const State* state, const Interpretation* interpretation, const char* caller_text)
 {
   if ((state == 0) || (interpretation == 0) || (interpretation->name[0] == '\0'))
@@ -460,7 +493,7 @@ static bool should_capture_name(const State* state, const Interpretation* interp
   }
   if (state->last_requested == field_caller_name)
   {
-    return true;
+    return looks_like_person_name(interpretation->name) && (person_name_word_count(interpretation->name) >= 2);
   }
   if (has_non_name_precursor(caller_text))
   {

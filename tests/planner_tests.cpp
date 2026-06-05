@@ -379,6 +379,25 @@ static void requested_name_is_captured(void)
   expect_true(plan.next_field != cerebras_v3::field_caller_name, "requested name advances");
 }
 
+static void requested_name_requires_first_and_last(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "service");
+  state.last_requested = cerebras_v3::field_caller_name;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.name, "Sam", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "Sam");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(state.fields[cerebras_v3::field_caller_name].status == cerebras_v3::status_missing, "requested name rejects first name only");
+  expect_true(plan.next_field == cerebras_v3::field_caller_name, "requested name reasks after first name only");
+}
+
 static void interpreter_confusion_captures_nothing(void)
 {
   cerebras_v3::State state;
@@ -773,6 +792,7 @@ int main(void)
   normalized_vehicle_names_are_captured();
   sales_opening_does_not_capture_name();
   requested_name_is_captured();
+  requested_name_requires_first_and_last();
   interpreter_confusion_captures_nothing();
   caller_question_mid_form_captures_nothing();
   caller_question_during_request_captures_nothing();

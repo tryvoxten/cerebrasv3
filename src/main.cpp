@@ -812,7 +812,7 @@ static bool copy_name_reply(const char* message, char* output, int capacity)
     if (word_length < 2) { return false; }
     word_count += 1;
   }
-  if (!any_letter || (word_count < 1) || (word_count > 4))
+  if (!any_letter || (word_count < 2) || (word_count > 4))
   {
     return false;
   }
@@ -966,6 +966,9 @@ static void apply_local_interpretation_fallback(
   }
   if ((interpretation->request[0] == '\0') &&
       (interpretation->department[0] != '\0') &&
+      ((state == 0) ||
+       (state->last_requested == cerebras_v3::field_none) ||
+       (state->last_requested == cerebras_v3::field_request)) &&
       (std::strlen(message) > 3U) &&
       !is_department_only_reply(lowered))
   {
@@ -1476,6 +1479,57 @@ static bool build_interruption_response(
   return false;
 }
 
+static bool build_rejection_response(
+  const cerebras_v3::State* state,
+  const cerebras_v3::Plan* plan,
+  cerebras_v3::Field_id previous_requested,
+  const char* message,
+  char* output,
+  int capacity)
+{
+  char question[text_capacity];
+  clear_buffer(output, capacity);
+  clear_buffer(question, text_capacity);
+  if ((plan == 0) || (output == 0) || (message == 0) || (message[0] == '\0'))
+  {
+    return false;
+  }
+  if ((previous_requested == cerebras_v3::field_none) ||
+      (previous_requested != plan->next_field))
+  {
+    return false;
+  }
+  if (!template_response(state, plan, question, text_capacity))
+  {
+    return false;
+  }
+  switch (plan->next_field)
+  {
+    case cerebras_v3::field_caller_name:
+      append_text(output, capacity, "I need both your first and last name. ");
+      break;
+    case cerebras_v3::field_last_name_spelling:
+      append_text(output, capacity, "I need the letters of your last name. ");
+      break;
+    case cerebras_v3::field_vehicle:
+      append_text(output, capacity, "I need the year, make, and model so the team knows which vehicle this is for. ");
+      break;
+    case cerebras_v3::field_request:
+      append_text(output, capacity, "I need a short description of what the team should help with. ");
+      break;
+    case cerebras_v3::field_callback_time:
+      append_text(output, capacity, "I need a callback day and time between 9 AM and 6 PM. ");
+      break;
+    case cerebras_v3::field_phone:
+      append_text(output, capacity, "I need a callback number with at least seven digits. ");
+      break;
+    default:
+      return false;
+  }
+  append_text(output, capacity, question);
+  return true;
+}
+
 static bool json_value(const char* json, const char* key, char* output, int capacity)
 {
   const char* found = 0;
@@ -1594,6 +1648,28 @@ static void process_chat_turn(
     return;
   }
   clear_turn_result(result);
+  if ((message == 0) || (message[0] == '\0'))
+  {
+    plan = cerebras_v3::plan_next(state);
+    state->last_requested = plan.next_field;
+    cerebras_v3::state_to_json(state, result->state_json, 2048);
+    append_text(result->response_text, text_capacity, "Thanks for calling. ");
+    if (plan.next_field == cerebras_v3::field_department)
+    {
+      append_text(result->response_text, text_capacity, "Is this for service, parts, or sales?");
+    }
+    else
+    {
+      char question[text_capacity];
+      clear_buffer(question, text_capacity);
+      if (template_response(state, &plan, question, text_capacity))
+      {
+        append_text(result->response_text, text_capacity, question);
+      }
+    }
+    cerebras_v3::copy_text(result->next_field, cerebras_v3::field_label(plan.next_field), 64);
+    return;
+  }
   cerebras_v3::state_to_json(state, result->state_json, 2048);
   cerebras_v3::clear_interpretation(&interpretation);
   result->used_interpreter = interpret_with_cerebras(config, result->state_json, recent_context, last_assistant, message, &interpretation);
@@ -1625,6 +1701,10 @@ static void process_chat_turn(
   state->last_requested = plan.next_field;
   cerebras_v3::state_to_json(state, result->state_json, 2048);
   (void)build_interruption_response(state, &plan, &interpretation, result->response_text, text_capacity);
+  if (result->response_text[0] == '\0')
+  {
+    (void)build_rejection_response(state, &plan, previous_requested, message, result->response_text, text_capacity);
+  }
   if ((result->response_text[0] == '\0') &&
       (interpretation.faq_id[0] != '\0') &&
       latest_caller_looks_like_question(message, &interpretation))
@@ -2207,10 +2287,6 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
         const int response_id = json_int_value(event, "\"response_id\"", 0);
         clear_buffer(caller_text, text_capacity);
         latest_user_from_retell_event(event, caller_text, text_capacity);
-        if (caller_text[0] == '\0')
-        {
-          cerebras_v3::copy_text(caller_text, "hello", text_capacity);
-        }
         set_call_id_if_present(&state, event);
         ensure_call_id(&state);
         {
