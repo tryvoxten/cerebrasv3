@@ -561,6 +561,25 @@ static bool should_skip_capture_for_turn(const Interpretation* interpretation)
     is_turn_type(interpretation, "unclear_audio");
 }
 
+static void clear_confirmation(Field* field)
+{
+  if (field != 0)
+  {
+    clear_text(field->value);
+    field->status = status_missing;
+    field->confidence = -1;
+    field->confirmed = false;
+  }
+}
+
+static bool answered_field_is(const Interpretation* interpretation, const char* field)
+{
+  return
+    (interpretation != 0) &&
+    (field != 0) &&
+    (std::strcmp(interpretation->answered_field, field) == 0);
+}
+
 static Department department_from_text(const char* text)
 {
   Department department = department_unknown;
@@ -612,6 +631,51 @@ void merge_interpretation(State* state, const Interpretation* interpretation, co
   }
   if (should_skip_capture_for_turn(interpretation))
   {
+    return;
+  }
+  if (is_turn_type(interpretation, "correction"))
+  {
+    department = department_from_text(interpretation->department);
+    if (answered_field_is(interpretation, "department") && (department != department_unknown))
+    {
+      state->department = department;
+      capture(&state->fields[field_department], department_name(department), 100);
+      return;
+    }
+    if (answered_field_is(interpretation, "vehicle") && is_whitelisted_vehicle(interpretation->vehicle))
+    {
+      capture(&state->fields[field_vehicle], interpretation->vehicle, 92);
+      return;
+    }
+    if (answered_field_is(interpretation, "request") && (interpretation->request[0] != '\0'))
+    {
+      capture(&state->fields[field_request], interpretation->request, 92);
+      return;
+    }
+    if (answered_field_is(interpretation, "callback_time") && valid_callback_time(interpretation->callback_time))
+    {
+      capture(&state->fields[field_callback_time], interpretation->callback_time, 92);
+      return;
+    }
+    if (answered_field_is(interpretation, "phone") && (interpretation->phone[0] != '\0'))
+    {
+      capture(&state->fields[field_phone], interpretation->phone, 94);
+      clear_confirmation(&state->fields[field_phone_confirmed]);
+      clear_confirmation(&state->fields[field_final_confirmed]);
+      return;
+    }
+    if (answered_field_is(interpretation, "name") && should_capture_name(state, interpretation, caller_text))
+    {
+      capture(&state->fields[field_caller_name], interpretation->name, 92);
+      clear_confirmation(&state->fields[field_last_name_spelling]);
+      clear_confirmation(&state->fields[field_final_confirmed]);
+      return;
+    }
+    if (answered_field_is(interpretation, "last_name_spelling") && (interpretation->spelling[0] != '\0'))
+    {
+      capture(&state->fields[field_last_name_spelling], interpretation->spelling, 92);
+      return;
+    }
     return;
   }
   department = department_from_text(interpretation->department);

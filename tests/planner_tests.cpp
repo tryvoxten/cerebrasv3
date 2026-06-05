@@ -460,6 +460,182 @@ static void parses_interpreter_turn_type(void)
   expect_true(std::strcmp(interpretation.meaning, "caller asks what the agent means") == 0, "meaning parsed");
 }
 
+static void correction_overwrites_vehicle(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Sam Patel", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "P A T E L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "Hyundai Tucson", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "setup");
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.last_requested = cerebras_v3::field_request;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "correction", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "vehicle", 64);
+  cerebras_v3::copy_text(interpretation.vehicle, "Honda Civic", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "actually it is a Honda Civic");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(std::strcmp(state.fields[cerebras_v3::field_vehicle].value, "Honda Civic") == 0, "correction overwrites vehicle");
+  expect_true(plan.next_field == cerebras_v3::field_request, "vehicle correction continues flow");
+}
+
+static void correction_overwrites_phone_and_clears_confirmation(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Sam Patel", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "P A T E L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "Honda Civic", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "brake noise", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.callback_time, "tomorrow at 10 AM", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.phone, "4165551111", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "setup");
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_phone_confirmed].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_phone_confirmed].confirmed = true;
+  state.last_requested = cerebras_v3::field_final_confirmed;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "correction", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "phone", 64);
+  cerebras_v3::copy_text(interpretation.phone, "4165559999", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "actually my number is 416 555 9999");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(std::strcmp(state.fields[cerebras_v3::field_phone].value, "4165559999") == 0, "correction overwrites phone");
+  expect_true(!state.fields[cerebras_v3::field_phone_confirmed].confirmed, "phone correction clears confirmation");
+  expect_true(plan.next_field == cerebras_v3::field_phone_confirmed, "phone correction re-confirms phone");
+}
+
+static void correction_switches_department(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "service");
+  state.last_requested = cerebras_v3::field_caller_name;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "correction", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "department", 64);
+  cerebras_v3::copy_text(interpretation.department, "parts", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "actually this is for parts");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(state.department == cerebras_v3::department_parts, "correction switches department");
+  expect_true(plan.next_field == cerebras_v3::field_caller_name, "department correction continues flow");
+}
+
+static void correction_overwrites_request(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Sam Patel", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "P A T E L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "Honda Civic", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "oil change", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "setup");
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.last_requested = cerebras_v3::field_callback_time;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "correction", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "request", 64);
+  cerebras_v3::copy_text(interpretation.request, "brake noise", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "actually it is a brake noise");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(std::strcmp(state.fields[cerebras_v3::field_request].value, "brake noise") == 0, "correction overwrites request");
+  expect_true(plan.next_field == cerebras_v3::field_callback_time, "request correction continues flow");
+}
+
+static void correction_overwrites_callback_time(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Sam Patel", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "P A T E L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "Honda Civic", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "brake noise", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.callback_time, "tomorrow at 10 AM", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "setup");
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.last_requested = cerebras_v3::field_phone;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "correction", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "callback_time", 64);
+  cerebras_v3::copy_text(interpretation.callback_time, "Friday at noon", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "sorry Friday at noon works better");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(std::strcmp(state.fields[cerebras_v3::field_callback_time].value, "Friday at noon") == 0, "correction overwrites callback time");
+  expect_true(plan.next_field == cerebras_v3::field_phone, "callback correction continues flow");
+}
+
+static void correction_overwrites_spelling(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Sam Patel", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "P A T T E L", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "setup");
+  state.last_requested = cerebras_v3::field_vehicle;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "correction", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "last_name_spelling", 64);
+  cerebras_v3::copy_text(interpretation.spelling, "P A T E L", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "actually one T, P A T E L");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(std::strcmp(state.fields[cerebras_v3::field_last_name_spelling].value, "P A T E L") == 0, "correction overwrites spelling");
+  expect_true(plan.next_field == cerebras_v3::field_vehicle, "spelling correction continues flow");
+}
+
+static void correction_overwrites_name(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Sam Patel", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "P A T E L", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "setup");
+  state.last_requested = cerebras_v3::field_vehicle;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "correction", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "name", 64);
+  cerebras_v3::copy_text(interpretation.name, "Samantha Patel", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "actually it is Samantha Patel");
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(std::strcmp(state.fields[cerebras_v3::field_caller_name].value, "Samantha Patel") == 0, "correction overwrites name");
+  expect_true(plan.next_field == cerebras_v3::field_last_name_spelling, "name correction reasks spelling");
+}
+
 static void precursor_name_is_captured(void)
 {
   cerebras_v3::State state;
@@ -601,6 +777,13 @@ int main(void)
   caller_question_mid_form_captures_nothing();
   caller_question_during_request_captures_nothing();
   parses_interpreter_turn_type();
+  correction_overwrites_vehicle();
+  correction_overwrites_phone_and_clears_confirmation();
+  correction_switches_department();
+  correction_overwrites_request();
+  correction_overwrites_callback_time();
+  correction_overwrites_spelling();
+  correction_overwrites_name();
   precursor_name_is_captured();
   non_name_precursor_does_not_capture_name();
   warranty_sentence_does_not_capture_spelling();

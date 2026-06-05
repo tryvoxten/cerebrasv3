@@ -1447,6 +1447,32 @@ static bool build_interruption_response(
     append_text(output, capacity, question);
     return true;
   }
+  if (std::strcmp(interpretation->turn_type, "correction") == 0)
+  {
+    append_text(output, capacity, "Got it");
+    if (std::strcmp(interpretation->answered_field, "department") == 0)
+    {
+      append_text(output, capacity, ", ");
+      append_text(output, capacity, cerebras_v3::department_name(state != 0 ? state->department : cerebras_v3::department_unknown));
+    }
+    else if ((std::strcmp(interpretation->answered_field, "vehicle") == 0) &&
+             (state != 0) &&
+             (state->fields[cerebras_v3::field_vehicle].value[0] != '\0'))
+    {
+      append_text(output, capacity, ", ");
+      append_text(output, capacity, state->fields[cerebras_v3::field_vehicle].value);
+    }
+    else if ((std::strcmp(interpretation->answered_field, "phone") == 0) &&
+             (state != 0) &&
+             (state->fields[cerebras_v3::field_phone].value[0] != '\0'))
+    {
+      append_text(output, capacity, ", ");
+      append_text(output, capacity, state->fields[cerebras_v3::field_phone].value);
+    }
+    append_text(output, capacity, ". ");
+    append_text(output, capacity, question);
+    return true;
+  }
   return false;
 }
 
