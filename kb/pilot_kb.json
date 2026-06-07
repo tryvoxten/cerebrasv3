@@ -88220,7 +88220,7 @@
       {
         "id": "service_hours",
         "description": "service hours, when service opens or closes, service department schedule",
-        "answer": "The team can confirm current service hours when they call back.",
+        "answer": "Service hours are 9 AM to 5 PM.",
         "aliases": [
           "service hours",
           "service open",

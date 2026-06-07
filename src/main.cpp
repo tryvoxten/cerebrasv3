@@ -17,6 +17,8 @@ const int request_capacity = 8192;
 const int response_capacity = 8192;
 const int text_capacity = 1024;
 const int cerebras_capacity = 8192;
+const int cerebras_payload_capacity = 16384;
+const int cerebras_system_capacity = 8192;
 const int context_capacity = 768;
 const int summary_capacity = 4096;
 const int websocket_capacity = 8192;
@@ -559,7 +561,7 @@ static bool call_cerebras(
   Buffer buffer;
   char authorization[320];
   char curl_error[CURL_ERROR_SIZE];
-  char payload[4096];
+  char payload[cerebras_payload_capacity];
   long http_code = 0;
   bool ok = false;
   clear_buffer(output, capacity);
@@ -575,24 +577,24 @@ static bool call_cerebras(
   clear_buffer(buffer.data, cerebras_capacity);
   clear_buffer(authorization, 320);
   clear_buffer(curl_error, CURL_ERROR_SIZE);
-  clear_buffer(payload, 4096);
+  clear_buffer(payload, cerebras_payload_capacity);
   append_text(authorization, 320, "authorization: Bearer ");
   append_text(authorization, 320, config->cerebras_key);
-  append_text(payload, 4096, "{\"model\":\"");
-  json_escape_append(payload, 4096, config->cerebras_model);
-  append_text(payload, 4096, "\",\"stream\":false,\"temperature\":0,\"reasoning_effort\":\"low\",\"max_completion_tokens\":");
-  if (max_tokens <= 120) { append_text(payload, 4096, "120"); }
-  else if (max_tokens <= 256) { append_text(payload, 4096, "256"); }
-  else { append_text(payload, 4096, "512"); }
+  append_text(payload, cerebras_payload_capacity, "{\"model\":\"");
+  json_escape_append(payload, cerebras_payload_capacity, config->cerebras_model);
+  append_text(payload, cerebras_payload_capacity, "\",\"stream\":false,\"temperature\":0,\"reasoning_effort\":\"low\",\"max_completion_tokens\":");
+  if (max_tokens <= 120) { append_text(payload, cerebras_payload_capacity, "120"); }
+  else if (max_tokens <= 256) { append_text(payload, cerebras_payload_capacity, "256"); }
+  else { append_text(payload, cerebras_payload_capacity, "512"); }
   if (json_mode)
   {
-    append_text(payload, 4096, ",\"response_format\":{\"type\":\"json_object\"}");
+    append_text(payload, cerebras_payload_capacity, ",\"response_format\":{\"type\":\"json_object\"}");
   }
-  append_text(payload, 4096, ",\"messages\":[{\"role\":\"system\",\"content\":\"");
-  json_escape_append(payload, 4096, system);
-  append_text(payload, 4096, "\"},{\"role\":\"user\",\"content\":\"");
-  json_escape_append(payload, 4096, user);
-  append_text(payload, 4096, "\"}]}");
+  append_text(payload, cerebras_payload_capacity, ",\"messages\":[{\"role\":\"system\",\"content\":\"");
+  json_escape_append(payload, cerebras_payload_capacity, system);
+  append_text(payload, cerebras_payload_capacity, "\"},{\"role\":\"user\",\"content\":\"");
+  json_escape_append(payload, cerebras_payload_capacity, user);
+  append_text(payload, cerebras_payload_capacity, "\"}]}");
   curl = curl_easy_init();
   if (curl == 0)
   {
@@ -641,21 +643,21 @@ static bool interpret_with_cerebras(
   const char* caller,
   cerebras_v3::Interpretation* interpretation)
 {
-  char system[2048];
+  char system[cerebras_system_capacity];
   char user[2048];
   char content[text_capacity];
-  clear_buffer(system, 2048);
-  append_text(system, 2048, cerebras_v3::prompt_sections::interpreter_role);
-  append_text(system, 2048, " ");
-  append_text(system, 2048, cerebras_v3::prompt_sections::interpreter_schema);
-  append_text(system, 2048, " ");
-  append_text(system, 2048, cerebras_v3::prompt_sections::interpreter_field_rules);
-  append_text(system, 2048, " ");
-  append_text(system, 2048, cerebras_v3::generated_kb::interpreter_faq_rules);
-  append_text(system, 2048, " ");
-  append_text(system, 2048, cerebras_v3::generated_kb::interpreter_affirmation_rules);
-  append_text(system, 2048, " ");
-  append_text(system, 2048, cerebras_v3::prompt_sections::interpreter_output_rules);
+  clear_buffer(system, cerebras_system_capacity);
+  append_text(system, cerebras_system_capacity, cerebras_v3::prompt_sections::interpreter_role);
+  append_text(system, cerebras_system_capacity, " ");
+  append_text(system, cerebras_system_capacity, cerebras_v3::prompt_sections::interpreter_schema);
+  append_text(system, cerebras_system_capacity, " ");
+  append_text(system, cerebras_system_capacity, cerebras_v3::prompt_sections::interpreter_field_rules);
+  append_text(system, cerebras_system_capacity, " ");
+  append_text(system, cerebras_system_capacity, cerebras_v3::generated_kb::interpreter_faq_rules);
+  append_text(system, cerebras_system_capacity, " ");
+  append_text(system, cerebras_system_capacity, cerebras_v3::generated_kb::interpreter_affirmation_rules);
+  append_text(system, cerebras_system_capacity, " ");
+  append_text(system, cerebras_system_capacity, cerebras_v3::prompt_sections::interpreter_output_rules);
   clear_buffer(user, 2048);
   append_text(user, 2048, "Known state: ");
   append_text(user, 2048, state_json);
@@ -1193,13 +1195,38 @@ static bool message_matches_faq_alias(const char* lowered_message, const char* f
   return false;
 }
 
+static bool best_matching_faq_id(const char* lowered_message, char* output, int capacity)
+{
+  int index = 0;
+  int best_length = 0;
+  clear_buffer(output, capacity);
+  if ((lowered_message == 0) || (output == 0) || (capacity <= 0))
+  {
+    return false;
+  }
+  while (index < cerebras_v3::generated_kb::faq_alias_count)
+  {
+    const char* phrase = cerebras_v3::generated_kb::faq_aliases[index].phrase;
+    const int phrase_length = static_cast<int>(std::strlen(phrase));
+    if ((phrase_length > best_length) && contains_text(lowered_message, phrase))
+    {
+      best_length = phrase_length;
+      cerebras_v3::copy_text(output, cerebras_v3::generated_kb::faq_aliases[index].faq_id, capacity);
+    }
+    index += 1;
+  }
+  return output[0] != '\0';
+}
+
 static void correct_faq_id_from_message(const char* message, cerebras_v3::Interpretation* interpretation)
 {
   char lowered[text_capacity];
+  char best_faq_id[64];
   if ((message == 0) || (interpretation == 0))
   {
     return;
   }
+  clear_buffer(best_faq_id, 64);
   lowercase_text(lowered, message, text_capacity);
   if (!latest_caller_looks_like_question(message, interpretation))
   {
@@ -1243,6 +1270,14 @@ static void correct_faq_id_from_message(const char* message, cerebras_v3::Interp
   else if (message_matches_faq_alias(lowered, "parts_availability"))
   {
     cerebras_v3::copy_text(interpretation->faq_id, "parts_availability", 64);
+  }
+  else if (message_matches_faq_alias(lowered, "service_hours"))
+  {
+    cerebras_v3::copy_text(interpretation->faq_id, "service_hours", 64);
+  }
+  else if (best_matching_faq_id(lowered, best_faq_id, 64))
+  {
+    cerebras_v3::copy_text(interpretation->faq_id, best_faq_id, 64);
   }
 }
 
@@ -2266,6 +2301,7 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
   clear_buffer(config_event, 256);
   append_text(config_event, 256, "{\"response_type\":\"config\",\"config\":{\"auto_reconnect\":false,\"call_details\":true}}");
   (void)websocket_send_frame(fd, 1, config_event);
+  websocket_send_retell_response(fd, 0, "", "Thanks for calling. Is this for service, parts, or sales?");
   log_json_line("websocket_open", "", "");
   while (websocket_read_text(fd, event, websocket_capacity, &opcode))
   {

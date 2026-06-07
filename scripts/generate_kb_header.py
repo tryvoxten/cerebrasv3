@@ -19,9 +19,10 @@ def quoted(text):
 
 def build_faq_prompt(kb):
     faq = kb["faq_runtime"]
-    labels = ", ".join(faq["labels"])
+    entries = runtime_faq_entries(kb)
+    labels = ", ".join(entry["id"] for entry in entries)
     meanings = []
-    for entry in faq["entries"]:
+    for entry in entries:
         meanings.append(f'{entry["id"]}={entry["description"]}')
     priorities = "; ".join(faq["priority_rules"])
     return (
@@ -33,6 +34,59 @@ def build_faq_prompt(kb):
         + priorities
         + "."
     )
+
+
+def service_entry_answer(entry):
+    title = entry.get("title", "")
+    summary = entry.get("summary", "")
+    availability = entry.get("availability", "")
+    conditions = entry.get("conditions", "")
+    limits = entry.get("limits", "")
+    notes = entry.get("notes", "")
+    parts = []
+    if availability == "yes":
+        parts.append(f"{title} is available.")
+    elif availability == "conditional":
+        parts.append(f"{title} may be available.")
+    if summary:
+        parts.append(summary + ".")
+    if conditions:
+        parts.append("Conditions: " + conditions + ".")
+    if limits:
+        parts.append("Limits: " + limits + ".")
+    if notes:
+        parts.append("Notes: " + notes + ".")
+    if availability == "conditional":
+        parts.append("The service team can confirm details when they call back.")
+    return " ".join(parts)
+
+
+def service_entry_to_faq(entry):
+    title = entry.get("title", "")
+    keywords = [str(keyword).lower() for keyword in entry.get("keywords", []) if keyword]
+    aliases = sorted(set(keywords + [title.lower()]))
+    description_parts = [title]
+    summary = entry.get("summary", "")
+    if summary:
+        description_parts.append(summary)
+    if keywords:
+        description_parts.append(", ".join(keywords))
+    return {
+        "id": entry["id"],
+        "description": "; ".join(description_parts),
+        "answer": service_entry_answer(entry),
+        "aliases": aliases,
+    }
+
+
+def runtime_faq_entries(kb):
+    entries = list(kb["faq_runtime"]["entries"])
+    existing_ids = set(entry["id"] for entry in entries)
+    for entry in kb.get("service_entries", []):
+        if entry["id"] not in existing_ids:
+            entries.append(service_entry_to_faq(entry))
+            existing_ids.add(entry["id"])
+    return entries
 
 
 def build_affirmation_prompt(kb):
@@ -96,7 +150,7 @@ extern const char* interpreter_affirmation_rules;
 
 
 def write_cpp(path, kb):
-    faq_entries = kb["faq_runtime"]["entries"]
+    faq_entries = runtime_faq_entries(kb)
     aliases = []
     for entry in faq_entries:
         for alias in entry["aliases"]:
