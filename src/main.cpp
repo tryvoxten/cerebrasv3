@@ -1688,13 +1688,13 @@ static void process_chat_turn(
     plan = cerebras_v3::plan_next(state);
     state->last_requested = plan.next_field;
     cerebras_v3::state_to_json(state, result->state_json, 2048);
-    append_text(result->response_text, text_capacity, "Thanks for calling. ");
     if (plan.next_field == cerebras_v3::field_department)
     {
-      append_text(result->response_text, text_capacity, "Is this for service, parts, or sales?");
+      append_text(result->response_text, text_capacity, "Thanks for calling. How may I help you today?");
     }
     else
     {
+      append_text(result->response_text, text_capacity, "Thanks for calling. ");
       char question[text_capacity];
       clear_buffer(question, text_capacity);
       if (template_response(state, &plan, question, text_capacity))
@@ -2301,7 +2301,7 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
   clear_buffer(config_event, 256);
   append_text(config_event, 256, "{\"response_type\":\"config\",\"config\":{\"auto_reconnect\":false,\"call_details\":true}}");
   (void)websocket_send_frame(fd, 1, config_event);
-  websocket_send_retell_response(fd, 0, "", "Thanks for calling. Is this for service, parts, or sales?");
+  websocket_send_retell_response(fd, 0, "", "Thanks for calling. How may I help you today?");
   log_json_line("websocket_open", "", "");
   while (websocket_read_text(fd, event, websocket_capacity, &opcode))
   {
