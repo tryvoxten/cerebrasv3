@@ -187,23 +187,45 @@ static bool has_callback_day_signal(const char* lowered)
 {
   return
     contains_text(lowered, "tomorrow") ||
+    contains_text(lowered, "business day") ||
     contains_text(lowered, "monday") ||
     contains_text(lowered, "tuesday") ||
     contains_text(lowered, "wednesday") ||
     contains_text(lowered, "thursday") ||
     contains_text(lowered, "friday") ||
     contains_text(lowered, "saturday") ||
-    contains_text(lowered, "sunday") ||
-    contains_text(lowered, "next ");
+    contains_text(lowered, "sunday");
 }
 
 static bool has_callback_window_signal(const char* lowered)
 {
   return
+    contains_text(lowered, "anytime") ||
+    contains_text(lowered, "any time") ||
     contains_text(lowered, "morning") ||
+    contains_text(lowered, "mid morning") ||
+    contains_text(lowered, "first thing") ||
+    contains_text(lowered, "when you open") ||
+    contains_text(lowered, "when they open") ||
     contains_text(lowered, "afternoon") ||
+    contains_text(lowered, "mid afternoon") ||
     contains_text(lowered, "lunch") ||
+    contains_text(lowered, "lunchtime") ||
     contains_text(lowered, "noon") ||
+    contains_text(lowered, "between 9") ||
+    contains_text(lowered, "between 10") ||
+    contains_text(lowered, "between 11") ||
+    contains_text(lowered, "between 12") ||
+    contains_text(lowered, "between 1") ||
+    contains_text(lowered, "between 2") ||
+    contains_text(lowered, "between 3") ||
+    contains_text(lowered, "from 9") ||
+    contains_text(lowered, "from 10") ||
+    contains_text(lowered, "from 11") ||
+    contains_text(lowered, "from 12") ||
+    contains_text(lowered, "from 1") ||
+    contains_text(lowered, "from 2") ||
+    contains_text(lowered, "from 3") ||
     contains_text(lowered, "at 9") ||
     contains_text(lowered, "at 10") ||
     contains_text(lowered, "at 11") ||
@@ -213,6 +235,24 @@ static bool has_callback_window_signal(const char* lowered)
     contains_text(lowered, "at 3") ||
     contains_text(lowered, "at 4") ||
     contains_text(lowered, "at 5") ||
+    contains_text(lowered, " 9 am") ||
+    contains_text(lowered, " 9:") ||
+    contains_text(lowered, " 10 am") ||
+    contains_text(lowered, " 10:") ||
+    contains_text(lowered, " 11 am") ||
+    contains_text(lowered, " 11:") ||
+    contains_text(lowered, " 12 pm") ||
+    contains_text(lowered, " 12:") ||
+    contains_text(lowered, " 1 pm") ||
+    contains_text(lowered, " 1:") ||
+    contains_text(lowered, " 2 pm") ||
+    contains_text(lowered, " 2:") ||
+    contains_text(lowered, " 3 pm") ||
+    contains_text(lowered, " 3:") ||
+    contains_text(lowered, " 4 pm") ||
+    contains_text(lowered, " 4:") ||
+    contains_text(lowered, " 5 pm") ||
+    contains_text(lowered, " 5:") ||
     contains_text(lowered, "after 9") ||
     contains_text(lowered, "after 10") ||
     contains_text(lowered, "after 11") ||
@@ -240,10 +280,18 @@ static bool has_callback_blocked_signal(const char* lowered)
     contains_text(lowered, "later today") ||
     contains_text(lowered, "today later") ||
     contains_text(lowered, "tonight") ||
+    contains_text(lowered, "night") ||
     contains_text(lowered, "evening") ||
+    contains_text(lowered, "after work") ||
+    contains_text(lowered, "end of day") ||
+    contains_text(lowered, "eod") ||
+    contains_text(lowered, "whenever") ||
     contains_text(lowered, "after 6") ||
     contains_text(lowered, "after 7") ||
     contains_text(lowered, "after 8") ||
+    contains_text(lowered, "after 9 pm") ||
+    contains_text(lowered, "9pm") ||
+    contains_text(lowered, "9 pm") ||
     contains_text(lowered, "8pm") ||
     contains_text(lowered, "8 pm") ||
     contains_text(lowered, "7pm") ||

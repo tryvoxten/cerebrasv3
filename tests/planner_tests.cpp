@@ -26,6 +26,43 @@ static void expect_true(bool value, const char* label)
   }
 }
 
+static cerebras_v3::Field_id next_after_callback_phrase(const char* phrase)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  state.department = cerebras_v3::department_service;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "maintenance", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "S M I T H", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_vehicle].value, "Tucson", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_request].value, "dash warning", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_vehicle].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_request].status = cerebras_v3::status_captured;
+  state.last_requested = cerebras_v3::field_callback_time;
+  cerebras_v3::copy_text(interpretation.callback_time, phrase, cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, phrase);
+  plan = cerebras_v3::plan_next(&state);
+  return plan.next_field;
+}
+
+static void expect_callback_accepts(const char* phrase, const char* label)
+{
+  expect_true(next_after_callback_phrase(phrase) != cerebras_v3::field_callback_time, label);
+}
+
+static void expect_callback_rejects(const char* phrase, const char* label)
+{
+  expect_true(next_after_callback_phrase(phrase) == cerebras_v3::field_callback_time, label);
+}
+
 static void interpreted_opening_routes_to_name(void)
 {
   cerebras_v3::State state;
@@ -771,6 +808,24 @@ static void callback_time_must_be_inside_allowed_window(void)
   cerebras_v3::merge_interpretation(&state, &interpretation, "Monday around 10");
   plan = cerebras_v3::plan_next(&state);
   expect_true(plan.next_field == cerebras_v3::field_phone, "raw callback time captures when ai leaves cb empty");
+
+  expect_callback_accepts("tomorrow morning", "tomorrow morning captures");
+  expect_callback_accepts("tomorrow afternoon", "tomorrow afternoon captures");
+  expect_callback_accepts("tomorrow after lunch", "tomorrow after lunch captures");
+  expect_callback_accepts("next Friday first thing", "first thing captures with a day");
+  expect_callback_accepts("next business day when you open", "open time captures with business day");
+  expect_callback_accepts("Friday between 10 and 2", "between range captures");
+  expect_callback_accepts("Monday from 1 to 4", "from range captures");
+  expect_callback_accepts("Wednesday 2:30", "colon time captures");
+  expect_callback_accepts("Thursday 10 am", "spoken am time captures");
+  expect_callback_accepts("anytime tomorrow", "anytime tomorrow captures");
+
+  expect_callback_rejects("anytime", "anytime alone is too vague");
+  expect_callback_rejects("next week at 10", "next week without a day is too vague");
+  expect_callback_rejects("tomorrow evening", "tomorrow evening is rejected after hours");
+  expect_callback_rejects("Friday after work", "after work is rejected after hours");
+  expect_callback_rejects("Monday whenever", "whenever is too vague");
+  expect_callback_rejects("Tuesday after 6", "after 6 is rejected after hours");
 }
 }
 
