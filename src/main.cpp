@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <curl/curl.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <cctype>
@@ -2433,6 +2434,7 @@ int main(int argument_count, char** argument_values, char** envp)
   (void)argument_count;
   (void)argument_values;
   load_config(envp, &config);
+  signal(SIGCHLD, SIG_IGN);
   server_fd = create_server_socket(config.port);
   if (server_fd < 0)
   {
@@ -2443,7 +2445,21 @@ int main(int argument_count, char** argument_values, char** envp)
     const int fd = accept(server_fd, 0, 0);
     if (fd >= 0)
     {
-      handle_connection(fd, &config);
+      const pid_t pid = fork();
+      if (pid == 0)
+      {
+        close(server_fd);
+        handle_connection(fd, &config);
+        return 0;
+      }
+      if (pid < 0)
+      {
+        handle_connection(fd, &config);
+      }
+      else
+      {
+        close(fd);
+      }
     }
   }
   return 0;
