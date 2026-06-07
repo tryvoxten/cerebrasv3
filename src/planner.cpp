@@ -188,6 +188,18 @@ static bool has_callback_day_signal(const char* lowered)
   return
     contains_text(lowered, "tomorrow") ||
     contains_text(lowered, "business day") ||
+    contains_text(lowered, "january") ||
+    contains_text(lowered, "february") ||
+    contains_text(lowered, "march") ||
+    contains_text(lowered, "april") ||
+    contains_text(lowered, "may") ||
+    contains_text(lowered, "june") ||
+    contains_text(lowered, "july") ||
+    contains_text(lowered, "august") ||
+    contains_text(lowered, "september") ||
+    contains_text(lowered, "october") ||
+    contains_text(lowered, "november") ||
+    contains_text(lowered, "december") ||
     contains_text(lowered, "monday") ||
     contains_text(lowered, "tuesday") ||
     contains_text(lowered, "wednesday") ||
@@ -689,6 +701,24 @@ void merge_interpretation(State* state, const Interpretation* interpretation, co
   {
     return;
   }
+  if ((state->last_requested == field_callback_time) &&
+      is_captured(&state->fields[field_callback_time]) &&
+      !state->fields[field_callback_time].confirmed &&
+      affirmation_is_no(interpretation, caller_text))
+  {
+    clear_text(state->fields[field_callback_time].value);
+    state->fields[field_callback_time].status = status_missing;
+    state->fields[field_callback_time].confirmed = false;
+    return;
+  }
+  if ((state->last_requested == field_callback_time) &&
+      is_captured(&state->fields[field_callback_time]) &&
+      !state->fields[field_callback_time].confirmed &&
+      affirmation_is_yes(interpretation, caller_text))
+  {
+    state->fields[field_callback_time].confirmed = true;
+    return;
+  }
   if ((state->last_requested == field_phone_confirmed) && affirmation_is_no(interpretation, caller_text))
   {
     clear_text(state->fields[field_phone].value);
@@ -736,6 +766,7 @@ void merge_interpretation(State* state, const Interpretation* interpretation, co
     if (answered_field_is(interpretation, "callback_time") && valid_callback_time(interpretation->callback_time))
     {
       capture(&state->fields[field_callback_time], interpretation->callback_time, 92);
+      clear_confirmation(&state->fields[field_final_confirmed]);
       return;
     }
     if (answered_field_is(interpretation, "phone") && (interpretation->phone[0] != '\0'))
@@ -785,10 +816,12 @@ void merge_interpretation(State* state, const Interpretation* interpretation, co
     if (valid_callback_time(interpretation->callback_time))
     {
       capture(&state->fields[field_callback_time], interpretation->callback_time, 88);
+      clear_confirmation(&state->fields[field_final_confirmed]);
     }
     else if ((state->last_requested == field_callback_time) && valid_callback_time(caller_text))
     {
       capture(&state->fields[field_callback_time], caller_text, 82);
+      clear_confirmation(&state->fields[field_final_confirmed]);
     }
   }
   if (!is_captured(&state->fields[field_phone]))
@@ -864,8 +897,14 @@ Plan plan_next(const State* state)
   else if (!is_captured(&state->fields[field_callback_time]))
   {
     plan.next_field = field_callback_time;
-    plan.response_task = "Ask what day and time between 9 AM and 6 PM works best for a callback.";
-    plan.fallback_sentence = "What day and time between 9 AM and 6 PM works best for a callback?";
+    plan.response_task = "Ask what day and time between 9 AM and 5 PM works best for a callback.";
+    plan.fallback_sentence = "What day and time between 9 AM and 5 PM works best for a callback?";
+  }
+  else if (!state->fields[field_callback_time].confirmed)
+  {
+    plan.next_field = field_callback_time;
+    plan.response_task = "Read back the interpreted callback date and time and ask if it is correct.";
+    plan.fallback_sentence = "Just to confirm, is that callback time correct?";
   }
   else if (!is_captured(&state->fields[field_phone]))
   {
@@ -1178,6 +1217,8 @@ void state_to_json(const State* state, char* output, int capacity)
   append_json_string(output, capacity, (state != 0) ? state->fields[field_request].value : "");
   append(output, capacity, ",\"callback_time\":");
   append_json_string(output, capacity, (state != 0) ? state->fields[field_callback_time].value : "");
+  append(output, capacity, ",\"callback_time_confirmed\":");
+  append(output, capacity, ((state != 0) && state->fields[field_callback_time].confirmed) ? "true" : "false");
   append(output, capacity, ",\"phone\":");
   append_json_string(output, capacity, (state != 0) ? state->fields[field_phone].value : "");
   append(output, capacity, ",\"phone_confirmed\":");
@@ -1223,6 +1264,11 @@ void load_state_from_json(State* state, const char* json)
   if (json_value(json, "\"vehicle\"", value, max_text)) { capture(&state->fields[field_vehicle], value, 90); }
   if (json_value(json, "\"request\"", value, max_text)) { capture(&state->fields[field_request], value, 90); }
   if (json_value(json, "\"callback_time\"", value, max_text)) { capture(&state->fields[field_callback_time], value, 90); }
+  if (json_bool(json, "\"callback_time_confirmed\""))
+  {
+    state->fields[field_callback_time].status = status_captured;
+    state->fields[field_callback_time].confirmed = true;
+  }
   if (json_value(json, "\"phone\"", value, max_text)) { capture(&state->fields[field_phone], value, 90); }
   if (json_bool(json, "\"phone_confirmed\""))
   {

@@ -89,6 +89,26 @@ static int append_text(char* output, int capacity, const char* text)
   return length;
 }
 
+static void current_date_text(char* output, int capacity)
+{
+  std::time_t now = 0;
+  std::tm local_time;
+  std::tm* local_time_ptr = 0;
+  if ((output == 0) || (capacity <= 0))
+  {
+    return;
+  }
+  output[0] = '\0';
+  now = std::time(0);
+  local_time_ptr = std::localtime(&now);
+  if (local_time_ptr == 0)
+  {
+    return;
+  }
+  local_time = *local_time_ptr;
+  (void)std::strftime(output, static_cast<unsigned long>(capacity), "%A, %B %d, %Y", &local_time);
+}
+
 static bool starts_with(const char* text, const char* prefix)
 {
   bool result = false;
@@ -647,9 +667,18 @@ static bool interpret_with_cerebras(
   char system[cerebras_system_capacity];
   char user[2048];
   char content[text_capacity];
+  char today[96];
   clear_buffer(system, cerebras_system_capacity);
+  clear_buffer(today, 96);
   append_text(system, cerebras_system_capacity, cerebras_v3::prompt_sections::interpreter_role);
   append_text(system, cerebras_system_capacity, " ");
+  current_date_text(today, 96);
+  if (today[0] != '\0')
+  {
+    append_text(system, cerebras_system_capacity, "Today is ");
+    append_text(system, cerebras_system_capacity, today);
+    append_text(system, cerebras_system_capacity, ". Resolve relative callback dates like tomorrow or two weeks from now into a concrete month, day, year, and time when the caller gave enough information. ");
+  }
   append_text(system, cerebras_system_capacity, cerebras_v3::prompt_sections::interpreter_schema);
   append_text(system, cerebras_system_capacity, " ");
   append_text(system, cerebras_system_capacity, cerebras_v3::prompt_sections::interpreter_field_rules);
@@ -1384,7 +1413,18 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
       cerebras_v3::copy_text(output, "What should I note for the team?", capacity);
       return true;
     case cerebras_v3::field_callback_time:
-      cerebras_v3::copy_text(output, "What day and time between 9 AM and 6 PM works best for a callback?", capacity);
+      if ((state != 0) &&
+          (state->fields[cerebras_v3::field_callback_time].value[0] != '\0') &&
+          !state->fields[cerebras_v3::field_callback_time].confirmed)
+      {
+        append_text(output, capacity, "I have ");
+        append_text(output, capacity, state->fields[cerebras_v3::field_callback_time].value);
+        append_text(output, capacity, ". Is that correct?");
+      }
+      else
+      {
+        cerebras_v3::copy_text(output, "What day and time between 9 AM and 5 PM works best for a callback?", capacity);
+      }
       return true;
     case cerebras_v3::field_phone:
       cerebras_v3::copy_text(output, "What is the best callback number?", capacity);
@@ -1554,7 +1594,7 @@ static bool build_rejection_response(
       append_text(output, capacity, "I need a short description of what the team should help with. ");
       break;
     case cerebras_v3::field_callback_time:
-      append_text(output, capacity, "I need a callback day and time between 9 AM and 6 PM. ");
+      append_text(output, capacity, "I need a callback day and time between 9 AM and 5 PM. ");
       break;
     case cerebras_v3::field_phone:
       append_text(output, capacity, "I need a callback number with at least seven digits. ");
