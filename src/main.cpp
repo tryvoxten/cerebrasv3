@@ -1094,6 +1094,68 @@ static void set_call_id_if_present(cerebras_v3::State* state, const char* source
   }
 }
 
+static void set_call_id_from_websocket_path(cerebras_v3::State* state, const char* request, const Config* config)
+{
+  const char* path = 0;
+  const char* end = 0;
+  const char* segment = 0;
+  const char* next = 0;
+  char candidate[64];
+  int out = 0;
+  if ((state == 0) || (request == 0) || (state->call_id[0] != '\0'))
+  {
+    return;
+  }
+  path = std::strstr(request, "GET /llm-websocket/");
+  if (path == 0)
+  {
+    return;
+  }
+  path += 19;
+  end = std::strchr(path, ' ');
+  if (end == 0)
+  {
+    return;
+  }
+  segment = path;
+  while ((segment < end) && (*segment != '?'))
+  {
+    next = segment;
+    while ((next < end) && (*next != '/') && (*next != '?'))
+    {
+      next += 1;
+    }
+    clear_buffer(candidate, 64);
+    out = 0;
+    while ((segment < next) && (out < 63))
+    {
+      candidate[out] = *segment;
+      out += 1;
+      segment += 1;
+    }
+    candidate[out] = '\0';
+    if ((candidate[0] != '\0') &&
+        ((config == 0) ||
+         (config->shared_secret[0] == '\0') ||
+         (std::strcmp(candidate, config->shared_secret) != 0)))
+    {
+      cerebras_v3::copy_text(state->call_id, candidate, 64);
+    }
+    if (state->call_id[0] != '\0')
+    {
+      return;
+    }
+    if ((next < end) && (*next == '/'))
+    {
+      segment = next + 1;
+    }
+    else
+    {
+      return;
+    }
+  }
+}
+
 static bool deliver_employee_summary(const Config* config, const char* summary_json)
 {
   CURL* curl = 0;
@@ -1652,6 +1714,30 @@ static int json_int_value(const char* json, const char* key, int fallback)
   while ((*found >= '0') && (*found <= '9'))
   {
     value = (value * 10) + (*found - '0');
+    any = true;
+    found += 1;
+  }
+  return any ? value : fallback;
+}
+
+static long json_long_value(const char* json, const char* key, long fallback)
+{
+  const char* found = 0;
+  long value = 0L;
+  bool any = false;
+  if ((json == 0) || (key == 0))
+  {
+    return fallback;
+  }
+  found = std::strstr(json, key);
+  if (found == 0) { return fallback; }
+  found = std::strchr(found, ':');
+  if (found == 0) { return fallback; }
+  found += 1;
+  while ((*found == ' ') || (*found == '\n') || (*found == '\r')) { found += 1; }
+  while ((*found >= '0') && (*found <= '9'))
+  {
+    value = (value * 10L) + static_cast<long>(*found - '0');
     any = true;
     found += 1;
   }
@@ -2324,6 +2410,25 @@ static void websocket_send_retell_response(int fd, int response_id, const char* 
   (void)websocket_send_frame(fd, 1, response);
 }
 
+static void websocket_send_ping_pong(int fd, const char* event)
+{
+  char response[128];
+  char timestamp_text[32];
+  long timestamp = 0L;
+  clear_buffer(response, 128);
+  clear_buffer(timestamp_text, 32);
+  timestamp = json_long_value(event, "\"timestamp\"", 0L);
+  if (timestamp <= 0L)
+  {
+    timestamp = static_cast<long>(std::time(0)) * 1000L;
+  }
+  snprintf(timestamp_text, sizeof(timestamp_text), "%ld", timestamp);
+  append_text(response, 128, "{\"response_type\":\"ping_pong\",\"timestamp\":");
+  append_text(response, 128, timestamp_text);
+  append_text(response, 128, "}");
+  (void)websocket_send_frame(fd, 1, response);
+}
+
 static void handle_llm_websocket(int fd, const char* request, const Config* config)
 {
   cerebras_v3::State state;
@@ -2334,16 +2439,17 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
   int opcode = 0;
   cerebras_v3::init_state(&state);
   clear_buffer(last_assistant, text_capacity);
+  set_call_id_from_websocket_path(&state, request, config);
   if (!websocket_handshake(fd, request))
   {
-    log_json_line("websocket_handshake_failed", "", "");
+    log_json_line("websocket_handshake_failed", state.call_id, "");
     return;
   }
   clear_buffer(config_event, 256);
-  append_text(config_event, 256, "{\"response_type\":\"config\",\"config\":{\"auto_reconnect\":false,\"call_details\":true}}");
+  append_text(config_event, 256, "{\"response_type\":\"config\",\"config\":{\"auto_reconnect\":true,\"call_details\":true}}");
   (void)websocket_send_frame(fd, 1, config_event);
-  websocket_send_retell_response(fd, 0, "", "Thanks for calling. How may I help you today?");
-  log_json_line("websocket_open", "", "");
+  websocket_send_retell_response(fd, 0, state.call_id, "Thanks for calling. How may I help you today?");
+  log_json_line("websocket_open", state.call_id, "");
   while (websocket_read_text(fd, event, websocket_capacity, &opcode))
   {
     if (opcode == 8)
@@ -2387,7 +2493,7 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
       }
       else if (contains_text(event, "\"ping_pong\""))
       {
-        (void)websocket_send_frame(fd, 1, "{\"response_type\":\"ping_pong\"}");
+        websocket_send_ping_pong(fd, event);
       }
     }
   }
