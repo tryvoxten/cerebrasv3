@@ -387,7 +387,48 @@ static void normalize_vehicle_text(char* output, const char* input, int capacity
   output[out] = '\0';
 }
 
-static bool is_whitelisted_vehicle(const char* vehicle)
+static bool has_alpha(const char* text)
+{
+  int index = 0;
+  if (text == 0)
+  {
+    return false;
+  }
+  while (text[index] != '\0')
+  {
+    if (std::isalpha(static_cast<unsigned char>(text[index])) != 0)
+    {
+      return true;
+    }
+    index += 1;
+  }
+  return false;
+}
+
+static bool is_canonical_vehicle_record(const char* vehicle)
+{
+  char normalized_vehicle[max_text];
+  char normalized_canonical[max_text];
+  int index = 0;
+  normalize_vehicle_text(normalized_vehicle, vehicle, max_text);
+  if (normalized_vehicle[0] == '\0')
+  {
+    return false;
+  }
+  while (index < generated_kb::vehicle_record_count)
+  {
+    normalize_vehicle_text(normalized_canonical, generated_kb::vehicle_records[index].canonical, max_text);
+    if ((normalized_canonical[0] != '\0') &&
+        (std::strcmp(normalized_vehicle, normalized_canonical) == 0))
+    {
+      return true;
+    }
+    index += 1;
+  }
+  return false;
+}
+
+static bool mentions_vehicle_model_or_alias(const char* vehicle)
 {
   char lowered[max_text];
   char model[max_text];
@@ -396,13 +437,14 @@ static bool is_whitelisted_vehicle(const char* vehicle)
   int index = 0;
   lowercase(lowered, vehicle, max_text);
   normalize_vehicle_text(normalized_vehicle, vehicle, max_text);
-  if (has_year(lowered))
-  {
-    return true;
-  }
   while (index < generated_kb::vehicle_model_count)
   {
     lowercase(model, generated_kb::vehicle_models[index], max_text);
+    if (!has_alpha(model))
+    {
+      index += 1;
+      continue;
+    }
     normalize_vehicle_text(normalized_model, generated_kb::vehicle_models[index], max_text);
     if (contains_text(lowered, model) ||
         ((normalized_model[0] != '\0') && contains_text(normalized_vehicle, normalized_model)))
@@ -424,6 +466,19 @@ static bool is_whitelisted_vehicle(const char* vehicle)
     index += 1;
   }
   return false;
+}
+
+static bool is_whitelisted_vehicle(const char* vehicle)
+{
+  if (is_canonical_vehicle_record(vehicle))
+  {
+    return true;
+  }
+  if (has_year(vehicle) && mentions_vehicle_model_or_alias(vehicle))
+  {
+    return true;
+  }
+  return mentions_vehicle_model_or_alias(vehicle);
 }
 
 static bool has_name_precursor(const char* caller_text)

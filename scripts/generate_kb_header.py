@@ -123,6 +123,14 @@ struct Faq_alias
   const char* faq_id;
 };
 
+struct Vehicle_record
+{
+  int year;
+  const char* make;
+  const char* model;
+  const char* canonical;
+};
+
 extern const Faq_entry faq_entries[];
 extern const int faq_entry_count;
 extern const Faq_alias faq_aliases[];
@@ -137,6 +145,8 @@ extern const char* vehicle_models[];
 extern const int vehicle_model_count;
 extern const char* vehicle_aliases[];
 extern const int vehicle_alias_count;
+extern const Vehicle_record vehicle_records[];
+extern const int vehicle_record_count;
 extern const char* interpreter_faq_rules;
 extern const char* interpreter_affirmation_rules;
 
@@ -159,6 +169,7 @@ def write_cpp(path, kb):
     affirmation = kb["affirmation_runtime"]
     vehicles = kb["vehicle_lexicon"]["models"]
     vehicle_aliases = sorted(kb["vehicle_lexicon"].get("aliases", {}).keys())
+    vehicle_records = kb["vehicle_lexicon"].get("records", [])
     faq_prompt = build_faq_prompt(kb)
     affirmation_prompt = build_affirmation_prompt(kb)
 
@@ -253,6 +264,31 @@ def write_cpp(path, kb):
         [
             "};",
             "const int vehicle_alias_count = sizeof(vehicle_aliases) / sizeof(vehicle_aliases[0]);",
+            "",
+            "const Vehicle_record vehicle_records[] =",
+            "{",
+        ]
+    )
+    for record in vehicle_records:
+        year = int(record["year"])
+        make = str(record["make"])
+        model = str(record["model"])
+        canonical = f"{year} {make} {model}"
+        lines.append(
+            "  { "
+            + str(year)
+            + ", "
+            + quoted(make)
+            + ", "
+            + quoted(model)
+            + ", "
+            + quoted(canonical)
+            + " },"
+        )
+    lines.extend(
+        [
+            "};",
+            "const int vehicle_record_count = sizeof(vehicle_records) / sizeof(vehicle_records[0]);",
             "",
             "const char* interpreter_faq_rules =",
             "  " + quoted(faq_prompt) + ";",

@@ -19,6 +19,14 @@ struct Faq_alias
   const char* faq_id;
 };
 
+struct Vehicle_record
+{
+  int year;
+  const char* make;
+  const char* model;
+  const char* canonical;
+};
+
 extern const Faq_entry faq_entries[];
 extern const int faq_entry_count;
 extern const Faq_alias faq_aliases[];
@@ -33,6 +41,8 @@ extern const char* vehicle_models[];
 extern const int vehicle_model_count;
 extern const char* vehicle_aliases[];
 extern const int vehicle_alias_count;
+extern const Vehicle_record vehicle_records[];
+extern const int vehicle_record_count;
 extern const char* interpreter_faq_rules;
 extern const char* interpreter_affirmation_rules;
 
