@@ -422,13 +422,24 @@ static void normalize_vehicle_text(char* output, const char* input, int capacity
   output[out] = '\0';
 }
 
-static bool normalized_contains_any(const char* normalized, const char* a, const char* b, const char* c, const char* d)
+static bool normalized_contains_any(
+  const char* normalized,
+  const char* a,
+  const char* b,
+  const char* c,
+  const char* d,
+  const char* e,
+  const char* f,
+  const char* g)
 {
   return
     ((a != 0) && contains_text(normalized, a)) ||
     ((b != 0) && contains_text(normalized, b)) ||
     ((c != 0) && contains_text(normalized, c)) ||
-    ((d != 0) && contains_text(normalized, d));
+    ((d != 0) && contains_text(normalized, d)) ||
+    ((e != 0) && contains_text(normalized, e)) ||
+    ((f != 0) && contains_text(normalized, f)) ||
+    ((g != 0) && contains_text(normalized, g));
 }
 
 static bool looks_like_ford_f150(const char* vehicle)
@@ -437,7 +448,15 @@ static bool looks_like_ford_f150(const char* vehicle)
   normalize_vehicle_text(normalized, vehicle, max_text);
   return
     contains_text(normalized, "ford") &&
-    normalized_contains_any(normalized, "f150", "fonefifty", "fdashonefifty", "fone50");
+    normalized_contains_any(
+      normalized,
+      "f150",
+      "fonefifty",
+      "fdashonefifty",
+      "fone50",
+      "fwonfifty",
+      "fonefivezero",
+      "fonefiveoh");
 }
 
 static void canonical_vehicle_text(char* output, const char* vehicle, int capacity)

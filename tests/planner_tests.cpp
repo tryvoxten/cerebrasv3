@@ -75,6 +75,26 @@ static void mark_callback_prerequisites(cerebras_v3::State* state)
   state->fields[cerebras_v3::field_request].status = cerebras_v3::status_captured;
 }
 
+static void expect_vehicle_stored(const char* input, const char* expected, const char* label)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "diagnostic", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "S M I T H", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, input, cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "truck warning light", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, input);
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(plan.next_field != cerebras_v3::field_vehicle, label);
+  expect_true(std::strcmp(state.fields[cerebras_v3::field_vehicle].value, expected) == 0, label);
+}
+
 static void interpreted_opening_routes_to_name(void)
 {
   cerebras_v3::State state;
@@ -417,6 +437,13 @@ static void normalized_vehicle_names_are_captured(void)
   plan = cerebras_v3::plan_next(&state);
   expect_true(plan.next_field != cerebras_v3::field_vehicle, "spoken F-150 vehicle captures");
   expect_true(std::strcmp(state.fields[cerebras_v3::field_vehicle].value, "2021 Ford F-150") == 0, "spoken F-150 stored canonically");
+
+  expect_vehicle_stored("2021 Ford F-one-fifty", "2021 Ford F-150", "hyphenated spoken F-150 captures");
+  expect_vehicle_stored("2021 Ford eff one fifty", "2021 Ford F-150", "eff one fifty captures");
+  expect_vehicle_stored("2021 Ford F won fifty", "2021 Ford F-150", "won fifty captures");
+  expect_vehicle_stored("2021 Ford F one five zero", "2021 Ford F-150", "one five zero captures");
+  expect_vehicle_stored("2021 Ford F one five oh", "2021 Ford F-150", "one five oh captures");
+  expect_vehicle_stored("2021 Ford F 1 50", "2021 Ford F-150", "digit spaced F-150 captures");
 
   cerebras_v3::init_state(&state);
   cerebras_v3::clear_interpretation(&interpretation);
