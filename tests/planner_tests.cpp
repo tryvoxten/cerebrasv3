@@ -402,6 +402,21 @@ static void normalized_vehicle_names_are_captured(void)
   state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
   plan = cerebras_v3::plan_next(&state);
   expect_true(plan.next_field != cerebras_v3::field_vehicle, "punctuated vehicle model captures");
+  expect_true(std::strcmp(state.fields[cerebras_v3::field_vehicle].value, "Ford F-150") == 0, "punctuated vehicle stored canonically");
+
+  cerebras_v3::init_state(&state);
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.department, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.intent, "diagnostic", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.name, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.spelling, "S M I T H", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.vehicle, "2021 Ford F one fifty", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.request, "truck warning light", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "2021 Ford F one fifty");
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  plan = cerebras_v3::plan_next(&state);
+  expect_true(plan.next_field != cerebras_v3::field_vehicle, "spoken F-150 vehicle captures");
+  expect_true(std::strcmp(state.fields[cerebras_v3::field_vehicle].value, "2021 Ford F-150") == 0, "spoken F-150 stored canonically");
 
   cerebras_v3::init_state(&state);
   cerebras_v3::clear_interpretation(&interpretation);

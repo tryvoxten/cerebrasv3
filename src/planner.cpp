@@ -1,6 +1,7 @@
 #include <planner.h>
 #include <generated_kb.h>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 
 namespace cerebras_v3
@@ -361,6 +362,40 @@ static bool has_year(const char* text)
   return false;
 }
 
+static int vehicle_year(const char* text)
+{
+  int index = 0;
+  int year = 0;
+  if (text == 0)
+  {
+    return 0;
+  }
+  while (text[index] != '\0')
+  {
+    if ((text[index] >= '0') &&
+        (text[index] <= '9') &&
+        (text[index + 1] >= '0') &&
+        (text[index + 1] <= '9') &&
+        (text[index + 2] >= '0') &&
+        (text[index + 2] <= '9') &&
+        (text[index + 3] >= '0') &&
+        (text[index + 3] <= '9'))
+    {
+      year =
+        ((text[index] - '0') * 1000) +
+        ((text[index + 1] - '0') * 100) +
+        ((text[index + 2] - '0') * 10) +
+        (text[index + 3] - '0');
+      if ((year >= 1995) && (year <= 2026))
+      {
+        return year;
+      }
+    }
+    index += 1;
+  }
+  return 0;
+}
+
 static void normalize_vehicle_text(char* output, const char* input, int capacity)
 {
   int in = 0;
@@ -385,6 +420,55 @@ static void normalize_vehicle_text(char* output, const char* input, int capacity
     in += 1;
   }
   output[out] = '\0';
+}
+
+static bool normalized_contains_any(const char* normalized, const char* a, const char* b, const char* c, const char* d)
+{
+  return
+    ((a != 0) && contains_text(normalized, a)) ||
+    ((b != 0) && contains_text(normalized, b)) ||
+    ((c != 0) && contains_text(normalized, c)) ||
+    ((d != 0) && contains_text(normalized, d));
+}
+
+static bool looks_like_ford_f150(const char* vehicle)
+{
+  char normalized[max_text];
+  normalize_vehicle_text(normalized, vehicle, max_text);
+  return
+    contains_text(normalized, "ford") &&
+    normalized_contains_any(normalized, "f150", "fonefifty", "fdashonefifty", "fone50");
+}
+
+static void canonical_vehicle_text(char* output, const char* vehicle, int capacity)
+{
+  char year_text[16];
+  const int year = vehicle_year(vehicle);
+  clear_text(output);
+  clear_text(year_text);
+  if ((output == 0) || (capacity <= 0))
+  {
+    return;
+  }
+  if (looks_like_ford_f150(vehicle))
+  {
+    if (year > 0)
+    {
+      copy_text(output, "", capacity);
+      std::snprintf(year_text, sizeof(year_text), "%d", year);
+      copy_text(output, year_text, capacity);
+      if (static_cast<int>(std::strlen(output)) < (capacity - 1))
+      {
+        std::strncat(output, " Ford F-150", static_cast<unsigned long>((capacity - 1) - static_cast<int>(std::strlen(output))));
+      }
+    }
+    else
+    {
+      copy_text(output, "Ford F-150", capacity);
+    }
+    return;
+  }
+  copy_text(output, vehicle, capacity);
 }
 
 static bool has_alpha(const char* text)
@@ -752,10 +836,12 @@ static Department department_from_text(const char* text)
 void merge_interpretation(State* state, const Interpretation* interpretation, const char* caller_text)
 {
   Department department = department_unknown;
+  char canonical_vehicle[max_text];
   if ((state == 0) || (interpretation == 0))
   {
     return;
   }
+  clear_text(canonical_vehicle);
   if ((state->last_requested == field_callback_time) &&
       is_captured(&state->fields[field_callback_time]) &&
       !state->fields[field_callback_time].confirmed &&
@@ -810,7 +896,8 @@ void merge_interpretation(State* state, const Interpretation* interpretation, co
     }
     if (answered_field_is(interpretation, "vehicle") && is_whitelisted_vehicle(interpretation->vehicle))
     {
-      capture(&state->fields[field_vehicle], interpretation->vehicle, 92);
+      canonical_vehicle_text(canonical_vehicle, interpretation->vehicle, max_text);
+      capture(&state->fields[field_vehicle], canonical_vehicle, 92);
       return;
     }
     if (answered_field_is(interpretation, "request") && (interpretation->request[0] != '\0'))
@@ -859,7 +946,8 @@ void merge_interpretation(State* state, const Interpretation* interpretation, co
   {
     if (is_whitelisted_vehicle(interpretation->vehicle))
     {
-      capture(&state->fields[field_vehicle], interpretation->vehicle, 88);
+      canonical_vehicle_text(canonical_vehicle, interpretation->vehicle, max_text);
+      capture(&state->fields[field_vehicle], canonical_vehicle, 88);
     }
   }
   if (!is_captured(&state->fields[field_request]))

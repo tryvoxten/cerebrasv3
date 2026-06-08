@@ -1559,6 +1559,11 @@ const int vehicle_model_count = sizeof(vehicle_models) / sizeof(vehicle_models[0
 
 const char* vehicle_aliases[] =
 {
+  "f 150",
+  "f dash one fifty",
+  "f one 50",
+  "f one fifty",
+  "f150",
   "ionic 5",
   "ioniq five",
   "palisades",
