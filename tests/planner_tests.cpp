@@ -444,6 +444,11 @@ static void normalized_vehicle_names_are_captured(void)
   expect_vehicle_stored("2021 Ford F one five zero", "2021 Ford F-150", "one five zero captures");
   expect_vehicle_stored("2021 Ford F one five oh", "2021 Ford F-150", "one five oh captures");
   expect_vehicle_stored("2021 Ford F 1 50", "2021 Ford F-150", "digit spaced F-150 captures");
+  expect_vehicle_stored("2021 BMW three series", "2021 BMW 3 Series", "spoken BMW 3 Series captures");
+  expect_vehicle_stored("2021 Mazda CX five", "2021 Mazda CX-5", "spoken Mazda CX-5 captures");
+  expect_vehicle_stored("2021 Hyundai Ioniq five", "2021 Hyundai IONIQ 5", "spoken IONIQ 5 captures");
+  expect_vehicle_stored("2020 Toyota eighty six", "2020 Toyota 86", "spoken Toyota 86 captures");
+  expect_vehicle_stored("2020 Mercedes C three hundred", "2020 Mercedes-Benz C-Class", "spoken Mercedes C-Class captures");
 
   cerebras_v3::init_state(&state);
   cerebras_v3::clear_interpretation(&interpretation);

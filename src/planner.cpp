@@ -459,32 +459,134 @@ static bool looks_like_ford_f150(const char* vehicle)
       "fonefiveoh");
 }
 
-static void canonical_vehicle_text(char* output, const char* vehicle, int capacity)
+static bool looks_like_bmw_3_series(const char* vehicle)
+{
+  char normalized[max_text];
+  normalize_vehicle_text(normalized, vehicle, max_text);
+  return
+    contains_text(normalized, "bmw") &&
+    (contains_text(normalized, "3series") ||
+     contains_text(normalized, "threeseries"));
+}
+
+static bool looks_like_mazda_cx5(const char* vehicle)
+{
+  char normalized[max_text];
+  normalize_vehicle_text(normalized, vehicle, max_text);
+  return
+    contains_text(normalized, "mazda") &&
+    (contains_text(normalized, "cx5") ||
+     contains_text(normalized, "cxfive"));
+}
+
+static bool looks_like_hyundai_ioniq5(const char* vehicle)
+{
+  char normalized[max_text];
+  normalize_vehicle_text(normalized, vehicle, max_text);
+  return
+    contains_text(normalized, "hyundai") &&
+    (contains_text(normalized, "ioniq5") ||
+     contains_text(normalized, "ioniqfive") ||
+     contains_text(normalized, "ionic5") ||
+     contains_text(normalized, "ionicfive"));
+}
+
+static bool looks_like_toyota_86(const char* vehicle)
+{
+  char normalized[max_text];
+  normalize_vehicle_text(normalized, vehicle, max_text);
+  return
+    contains_text(normalized, "toyota") &&
+    (contains_text(normalized, "86") ||
+     contains_text(normalized, "eightysix"));
+}
+
+static bool looks_like_mercedes_c_class(const char* vehicle)
+{
+  char normalized[max_text];
+  normalize_vehicle_text(normalized, vehicle, max_text);
+  return
+    (contains_text(normalized, "mercedes") || contains_text(normalized, "benz")) &&
+    (contains_text(normalized, "cclass") ||
+     contains_text(normalized, "c300") ||
+     contains_text(normalized, "cthreehundred"));
+}
+
+static bool looks_like_known_spoken_model_code(const char* vehicle)
+{
+  return
+    looks_like_ford_f150(vehicle) ||
+    looks_like_bmw_3_series(vehicle) ||
+    looks_like_mazda_cx5(vehicle) ||
+    looks_like_hyundai_ioniq5(vehicle) ||
+    looks_like_toyota_86(vehicle) ||
+    looks_like_mercedes_c_class(vehicle);
+}
+
+static void copy_year_make_model(char* output, int capacity, int year, const char* make_model)
 {
   char year_text[16];
-  const int year = vehicle_year(vehicle);
   clear_text(output);
   clear_text(year_text);
+  if ((output == 0) || (capacity <= 0) || (make_model == 0))
+  {
+    return;
+  }
+  if (year > 0)
+  {
+    std::snprintf(year_text, sizeof(year_text), "%d", year);
+    copy_text(output, year_text, capacity);
+    if (static_cast<int>(std::strlen(output)) < (capacity - 1))
+    {
+      std::strncat(output, " ", static_cast<unsigned long>((capacity - 1) - static_cast<int>(std::strlen(output))));
+    }
+    if (static_cast<int>(std::strlen(output)) < (capacity - 1))
+    {
+      std::strncat(output, make_model, static_cast<unsigned long>((capacity - 1) - static_cast<int>(std::strlen(output))));
+    }
+  }
+  else
+  {
+    copy_text(output, make_model, capacity);
+  }
+}
+
+static void canonical_vehicle_text(char* output, const char* vehicle, int capacity)
+{
+  const int year = vehicle_year(vehicle);
+  clear_text(output);
   if ((output == 0) || (capacity <= 0))
   {
     return;
   }
   if (looks_like_ford_f150(vehicle))
   {
-    if (year > 0)
-    {
-      copy_text(output, "", capacity);
-      std::snprintf(year_text, sizeof(year_text), "%d", year);
-      copy_text(output, year_text, capacity);
-      if (static_cast<int>(std::strlen(output)) < (capacity - 1))
-      {
-        std::strncat(output, " Ford F-150", static_cast<unsigned long>((capacity - 1) - static_cast<int>(std::strlen(output))));
-      }
-    }
-    else
-    {
-      copy_text(output, "Ford F-150", capacity);
-    }
+    copy_year_make_model(output, capacity, year, "Ford F-150");
+    return;
+  }
+  if (looks_like_bmw_3_series(vehicle))
+  {
+    copy_year_make_model(output, capacity, year, "BMW 3 Series");
+    return;
+  }
+  if (looks_like_mazda_cx5(vehicle))
+  {
+    copy_year_make_model(output, capacity, year, "Mazda CX-5");
+    return;
+  }
+  if (looks_like_hyundai_ioniq5(vehicle))
+  {
+    copy_year_make_model(output, capacity, year, "Hyundai IONIQ 5");
+    return;
+  }
+  if (looks_like_toyota_86(vehicle))
+  {
+    copy_year_make_model(output, capacity, year, "Toyota 86");
+    return;
+  }
+  if (looks_like_mercedes_c_class(vehicle))
+  {
+    copy_year_make_model(output, capacity, year, "Mercedes-Benz C-Class");
     return;
   }
   copy_text(output, vehicle, capacity);
@@ -574,6 +676,10 @@ static bool mentions_vehicle_model_or_alias(const char* vehicle)
 static bool is_whitelisted_vehicle(const char* vehicle)
 {
   if (is_canonical_vehicle_record(vehicle))
+  {
+    return true;
+  }
+  if (looks_like_known_spoken_model_code(vehicle))
   {
     return true;
   }
