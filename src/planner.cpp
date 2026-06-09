@@ -466,7 +466,10 @@ static bool looks_like_bmw_3_series(const char* vehicle)
   return
     contains_text(normalized, "bmw") &&
     (contains_text(normalized, "3series") ||
-     contains_text(normalized, "threeseries"));
+     contains_text(normalized, "threeseries") ||
+     contains_text(normalized, "m340i") ||
+     contains_text(normalized, "mthreefortyi") ||
+     contains_text(normalized, "mthreefortyeye"));
 }
 
 static bool looks_like_mazda_cx5(const char* vehicle)

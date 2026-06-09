@@ -445,6 +445,8 @@ static void normalized_vehicle_names_are_captured(void)
   expect_vehicle_stored("2021 Ford F one five oh", "2021 Ford F-150", "one five oh captures");
   expect_vehicle_stored("2021 Ford F 1 50", "2021 Ford F-150", "digit spaced F-150 captures");
   expect_vehicle_stored("2021 BMW three series", "2021 BMW 3 Series", "spoken BMW 3 Series captures");
+  expect_vehicle_stored("2021 BMW M three forty I", "2021 BMW 3 Series", "spoken BMW M340i maps to 3 Series");
+  expect_vehicle_stored("2021 BMW M340i", "2021 BMW 3 Series", "written BMW M340i maps to 3 Series");
   expect_vehicle_stored("2021 Mazda CX five", "2021 Mazda CX-5", "spoken Mazda CX-5 captures");
   expect_vehicle_stored("2021 Hyundai Ioniq five", "2021 Hyundai IONIQ 5", "spoken IONIQ 5 captures");
   expect_vehicle_stored("2020 Toyota eighty six", "2020 Toyota 86", "spoken Toyota 86 captures");
