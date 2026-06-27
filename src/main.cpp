@@ -1143,10 +1143,6 @@ static void set_call_id_from_websocket_path(cerebras_v3::State* state, const cha
     {
       cerebras_v3::copy_text(state->call_id, candidate, 64);
     }
-    if (state->call_id[0] != '\0')
-    {
-      return;
-    }
     if ((next < end) && (*next == '/'))
     {
       segment = next + 1;

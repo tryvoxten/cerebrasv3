@@ -50,10 +50,27 @@ static void websocket_path_uses_first_non_secret_segment(void)
   expect_text(state.call_id, "retell-call-456", "short secret segment is skipped");
 }
 
+static void websocket_path_uses_last_segment_after_static_prefix(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  const char* request =
+    "GET /llm-websocket/retell/retell-call-789?secret=hidden HTTP/1.1\r\n"
+    "Host: localhost\r\n\r\n";
+  load_config(0, &config);
+  cerebras_v3::copy_text(config.shared_secret, "hidden", 128);
+  cerebras_v3::init_state(&state);
+
+  set_call_id_from_websocket_path(&state, request, &config);
+
+  expect_text(state.call_id, "retell-call-789", "last path segment becomes the Retell call ID");
+}
+
 int main(void)
 {
   websocket_path_skips_full_length_secret();
   websocket_path_uses_first_non_secret_segment();
+  websocket_path_uses_last_segment_after_static_prefix();
   if (failures == 0)
   {
     std::printf("main_tests: PASS\n");
