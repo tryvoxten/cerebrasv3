@@ -18,7 +18,7 @@ planner decides what is missing next.
 ## Environment
 
 ```bash
-export RETELL_SHARED_SECRET=therealtestingsecretforcodex
+export RETELL_SHARED_SECRET=...
 export CEREBRAS_API_KEY=...
 export CEREBRAS_MODEL=gpt-oss-120b
 export PORT=8098
@@ -43,7 +43,7 @@ make check
 
 ```bash
 curl -sS http://127.0.0.1:8098/test-chat \
-  -H "authorization: Bearer therealtestingsecretforcodex" \
+  -H "authorization: Bearer $RETELL_SHARED_SECRET" \
   -H "content-type: application/json" \
   -d '{"call_id":"manual-test-001","message":"my dash is yelling maintenance at me","state":{}}'
 ```
@@ -186,21 +186,29 @@ The pilot standard lives in `PILOT_TEST_STANDARD.md`. Run the fixed 12-call
 acceptance batch against a local server:
 
 ```bash
-make pilot
+RETELL_SHARED_SECRET=... make pilot
 ```
 
 Run it against Fly:
 
 ```bash
-PILOT_TEST_URL=https://voxten-cerebras-v3.fly.dev/test-chat make pilot
+RETELL_SHARED_SECRET=... \
+PILOT_TEST_URL=https://voxten-cerebras-v3.fly.dev/test-chat \
+make pilot
 ```
 
 Useful options:
 
 ```bash
 PILOT_VERBOSE=1 make pilot
-RETELL_SHARED_SECRET=... make pilot
+PILOT_ALLOW_FALLBACK=1 make pilot
 ```
+
+The acceptance runner requires `RETELL_SHARED_SECRET`; it never supplies a
+built-in secret. By default it also stops if the first turn does not use the
+Cerebras interpreter, which catches a missing API key or unavailable model
+before a fallback-only run produces misleading product scores. Set
+`PILOT_ALLOW_FALLBACK=1` only when fallback behavior is the thing being tested.
 
 The batch passes at `108/120` or higher only if there are no banned wording
 failures, no multi-question failures, median latency is under `800 ms`, and P90

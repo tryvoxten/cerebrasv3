@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 
 const targetUrl = process.env.PILOT_TEST_URL || "http://127.0.0.1:8098/test-chat";
-const sharedSecret = process.env.RETELL_SHARED_SECRET || "therealtestingsecretforcodex";
+const sharedSecret = process.env.RETELL_SHARED_SECRET;
 const experimentalSanitize = process.env.PILOT_SANITIZE_RESPONSES === "1";
+const allowFallbackOnly = process.env.PILOT_ALLOW_FALLBACK === "1";
 const maxTurns = 12;
+
+if (!sharedSecret) {
+  console.error("Set RETELL_SHARED_SECRET before running the pilot acceptance batch.");
+  console.error("Example: RETELL_SHARED_SECRET='...' make pilot");
+  process.exit(2);
+}
 
 const bannedPhrases = [
   "for our records",
@@ -379,6 +386,11 @@ async function postTurn(message, state, lastAssistant, history) {
     throw new Error(`Bad JSON from ${targetUrl}: ${text}`);
   }
   if (!response.ok) {
+    if (response.status === 401 || response.status === 404) {
+      throw new Error(
+        `Authentication failed for ${targetUrl}. Check RETELL_SHARED_SECRET for the target environment.`
+      );
+    }
     throw new Error(`HTTP ${response.status}: ${text}`);
   }
   return { ms, json };
@@ -481,6 +493,12 @@ async function runScenario(scenario) {
     const rawAssistant = json.content || "";
     const assistant = experimentalSanitize ? sanitizeResponse(rawAssistant) : rawAssistant;
     const nextField = json.next_field || "none";
+    if ((index === 0) && !allowFallbackOnly && json.used_interpreter !== true) {
+      throw new Error(
+        "The first turn did not use the Cerebras interpreter. " +
+        "Check CEREBRAS_API_KEY on the target, or set PILOT_ALLOW_FALLBACK=1 to test fallback-only behavior."
+      );
+    }
     state = json.state || {};
     turns.push({ caller, assistant, rawAssistant, nextField, ms });
     history.push({ role: "caller", text: caller });
@@ -516,6 +534,7 @@ const latencies = [];
 console.log(`Pilot acceptance target: ${targetUrl}`);
 console.log(`Scenarios: ${scenarios.length}`);
 console.log(`experimental_sanitize_responses: ${experimentalSanitize ? "on" : "off"}`);
+console.log(`fallback_only_allowed: ${allowFallbackOnly ? "yes" : "no"}`);
 
 for (const scenario of scenarios) {
   const result = await runScenario(scenario);

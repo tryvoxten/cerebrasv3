@@ -1102,6 +1102,7 @@ static void set_call_id_from_websocket_path(cerebras_v3::State* state, const cha
   const char* next = 0;
   char candidate[64];
   int out = 0;
+  bool is_secret_segment = false;
   if ((state == 0) || (request == 0) || (state->call_id[0] != '\0'))
   {
     return;
@@ -1125,19 +1126,20 @@ static void set_call_id_from_websocket_path(cerebras_v3::State* state, const cha
     {
       next += 1;
     }
+    is_secret_segment =
+      (config != 0) &&
+      (config->shared_secret[0] != '\0') &&
+      (static_cast<std::size_t>(next - segment) == std::strlen(config->shared_secret)) &&
+      (std::strncmp(segment, config->shared_secret, static_cast<std::size_t>(next - segment)) == 0);
     clear_buffer(candidate, 64);
     out = 0;
-    while ((segment < next) && (out < 63))
+    while (((segment + out) < next) && (out < 63))
     {
-      candidate[out] = *segment;
+      candidate[out] = segment[out];
       out += 1;
-      segment += 1;
     }
     candidate[out] = '\0';
-    if ((candidate[0] != '\0') &&
-        ((config == 0) ||
-         (config->shared_secret[0] == '\0') ||
-         (std::strcmp(candidate, config->shared_secret) != 0)))
+    if ((candidate[0] != '\0') && !is_secret_segment)
     {
       cerebras_v3::copy_text(state->call_id, candidate, 64);
     }

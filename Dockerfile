@@ -6,7 +6,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY . .
-RUN make clean && make check
+RUN make clean && make check-cpp
 
 FROM debian:bookworm-slim
 
