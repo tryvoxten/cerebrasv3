@@ -877,9 +877,26 @@ void init_state(State* state)
   state->department = department_unknown;
   state->last_requested = field_none;
   state->delivery_sent = false;
-  for (index = 0; index < 10; index += 1)
+  state->history.turn_count = 0;
+  state->history.recent_structure_count = 0;
+  state->history.recent_phrase_count = 0;
+  state->history.last_response_act = 0;
+  state->history.phase = conversation_phase_opening;
+  state->history.interrupted_field = field_none;
+  state->history.caller_pace = caller_pace_unknown;
+  state->history.caller_confused = false;
+  for (index = 0; index < tracked_field_count; index += 1)
   {
     init_field(&state->fields[index]);
+    state->history.retry_counts[index] = 0;
+  }
+  for (index = 0; index < max_recent_structures; index += 1)
+  {
+    state->history.recent_structure_ids[index] = 0;
+  }
+  for (index = 0; index < max_recent_phrase_ids; index += 1)
+  {
+    state->history.recent_phrase_ids[index] = 0;
   }
 }
 
@@ -961,7 +978,7 @@ static Department department_from_text(const char* text)
   return department;
 }
 
-void merge_interpretation(State* state, const Interpretation* interpretation, const char* caller_text)
+static void merge_interpretation_fields(State* state, const Interpretation* interpretation, const char* caller_text)
 {
   Department department = department_unknown;
   char canonical_vehicle[max_text];
@@ -1115,6 +1132,103 @@ void merge_interpretation(State* state, const Interpretation* interpretation, co
       (interpretation->spelling[0] != '\0') ? interpretation->spelling : caller_text,
       looks_like_spelled_letters(caller_text) ? 94 : 84);
   }
+}
+
+static int field_progress(const State* state, Field_id field)
+{
+  int progress = 0;
+  if ((state == 0) || (field < field_department) || (field >= field_none))
+  {
+    return 0;
+  }
+  if (state->fields[field].status == status_captured)
+  {
+    progress = 1;
+  }
+  if (state->fields[field].confirmed)
+  {
+    progress += 1;
+  }
+  return progress;
+}
+
+static bool turn_counts_as_retry(const Interpretation* interpretation)
+{
+  if (interpretation == 0)
+  {
+    return false;
+  }
+  return
+    !is_turn_type(interpretation, "caller_question") &&
+    !is_turn_type(interpretation, "correction");
+}
+
+static Conversation_phase conversation_phase_for_state(const State* state)
+{
+  if (state == 0)
+  {
+    return conversation_phase_opening;
+  }
+  if (state->fields[field_final_confirmed].confirmed)
+  {
+    return conversation_phase_complete;
+  }
+  if (is_captured(&state->fields[field_callback_time]) ||
+      is_captured(&state->fields[field_phone]))
+  {
+    return conversation_phase_confirmation;
+  }
+  if (is_captured(&state->fields[field_request]))
+  {
+    return conversation_phase_contact;
+  }
+  if (is_captured(&state->fields[field_department]) ||
+      is_captured(&state->fields[field_intent]))
+  {
+    return conversation_phase_discovery;
+  }
+  return conversation_phase_opening;
+}
+
+void merge_interpretation(State* state, const Interpretation* interpretation, const char* caller_text)
+{
+  Field_id requested = field_none;
+  int before = 0;
+  int after = 0;
+  if ((state == 0) || (interpretation == 0))
+  {
+    return;
+  }
+  requested = state->last_requested;
+  before = field_progress(state, requested);
+  merge_interpretation_fields(state, interpretation, caller_text);
+  after = field_progress(state, requested);
+  state->history.turn_count += 1;
+  state->history.caller_confused = is_turn_type(interpretation, "customer_confusion");
+  if (is_turn_type(interpretation, "caller_question") ||
+      is_turn_type(interpretation, "customer_confusion") ||
+      is_turn_type(interpretation, "unclear_audio") ||
+      is_turn_type(interpretation, "off_topic"))
+  {
+    state->history.interrupted_field = requested;
+  }
+  else
+  {
+    state->history.interrupted_field = field_none;
+  }
+  if ((requested >= field_department) && (requested < field_none))
+  {
+    if (after > before)
+    {
+      state->history.retry_counts[requested] = 0;
+    }
+    else if (turn_counts_as_retry(interpretation) &&
+             (state->history.retry_counts[requested] < 9))
+    {
+      state->history.retry_counts[requested] += 1;
+    }
+  }
+  state->history.phase = conversation_phase_for_state(state);
 }
 
 Plan plan_next(const State* state)
@@ -1468,6 +1582,130 @@ static void append_json_string(char* output, int capacity, const char* text)
   append(output, capacity, "\"");
 }
 
+static void append_json_int(char* output, int capacity, int value)
+{
+  char number[32];
+  std::snprintf(number, sizeof(number), "%d", value);
+  append(output, capacity, number);
+}
+
+static void append_json_int_array(char* output, int capacity, const int* values, int count)
+{
+  int index = 0;
+  append(output, capacity, "[");
+  while (index < count)
+  {
+    if (index > 0)
+    {
+      append(output, capacity, ",");
+    }
+    append_json_int(output, capacity, values[index]);
+    index += 1;
+  }
+  append(output, capacity, "]");
+}
+
+static int json_int(const char* json, const char* key, int fallback)
+{
+  const char* found = 0;
+  int value = 0;
+  int sign = 1;
+  bool any = false;
+  if ((json == 0) || (key == 0))
+  {
+    return fallback;
+  }
+  found = std::strstr(json, key);
+  if (found == 0)
+  {
+    return fallback;
+  }
+  found = std::strchr(found, ':');
+  if (found == 0)
+  {
+    return fallback;
+  }
+  found += 1;
+  while ((*found == ' ') || (*found == '\n') || (*found == '\r'))
+  {
+    found += 1;
+  }
+  if (*found == '-')
+  {
+    sign = -1;
+    found += 1;
+  }
+  while ((*found >= '0') && (*found <= '9'))
+  {
+    value = (value * 10) + (*found - '0');
+    any = true;
+    found += 1;
+  }
+  return any ? (value * sign) : fallback;
+}
+
+static int json_int_array(const char* json, const char* key, int* values, int capacity)
+{
+  const char* found = 0;
+  int count = 0;
+  if ((json == 0) || (key == 0) || (values == 0) || (capacity <= 0))
+  {
+    return 0;
+  }
+  found = std::strstr(json, key);
+  if (found == 0)
+  {
+    return 0;
+  }
+  found = std::strchr(found, '[');
+  if (found == 0)
+  {
+    return 0;
+  }
+  found += 1;
+  while ((*found != '\0') && (*found != ']') && (count < capacity))
+  {
+    int value = 0;
+    int sign = 1;
+    bool any = false;
+    while ((*found == ' ') || (*found == ',') || (*found == '\n') || (*found == '\r'))
+    {
+      found += 1;
+    }
+    if (*found == '-')
+    {
+      sign = -1;
+      found += 1;
+    }
+    while ((*found >= '0') && (*found <= '9'))
+    {
+      value = (value * 10) + (*found - '0');
+      any = true;
+      found += 1;
+    }
+    if (!any)
+    {
+      break;
+    }
+    values[count] = value * sign;
+    count += 1;
+  }
+  return count;
+}
+
+static int bounded_int(int value, int minimum, int maximum)
+{
+  if (value < minimum)
+  {
+    return minimum;
+  }
+  if (value > maximum)
+  {
+    return maximum;
+  }
+  return value;
+}
+
 void state_to_json(const State* state, char* output, int capacity)
 {
   clear_text(output);
@@ -1500,6 +1738,29 @@ void state_to_json(const State* state, char* output, int capacity)
   append_json_string(output, capacity, (state != 0) ? field_label(state->last_requested) : "none");
   append(output, capacity, ",\"delivery_sent\":");
   append(output, capacity, ((state != 0) && state->delivery_sent) ? "true" : "false");
+  if (state != 0)
+  {
+    append(output, capacity, ",\"h\":{");
+    append(output, capacity, "\"tc\":");
+    append_json_int(output, capacity, state->history.turn_count);
+    append(output, capacity, ",\"rr\":");
+    append_json_int_array(output, capacity, state->history.retry_counts, tracked_field_count);
+    append(output, capacity, ",\"rs\":");
+    append_json_int_array(output, capacity, state->history.recent_structure_ids, state->history.recent_structure_count);
+    append(output, capacity, ",\"rp\":");
+    append_json_int_array(output, capacity, state->history.recent_phrase_ids, state->history.recent_phrase_count);
+    append(output, capacity, ",\"la\":");
+    append_json_int(output, capacity, state->history.last_response_act);
+    append(output, capacity, ",\"ph\":");
+    append_json_int(output, capacity, static_cast<int>(state->history.phase));
+    append(output, capacity, ",\"if\":");
+    append_json_int(output, capacity, static_cast<int>(state->history.interrupted_field));
+    append(output, capacity, ",\"cp\":");
+    append_json_int(output, capacity, static_cast<int>(state->history.caller_pace));
+    append(output, capacity, ",\"cc\":");
+    append(output, capacity, state->history.caller_confused ? "true" : "false");
+    append(output, capacity, "}");
+  }
   append(output, capacity, "}");
 }
 
@@ -1507,6 +1768,7 @@ void load_state_from_json(State* state, const char* json)
 {
   char value[max_text];
   Department department = department_unknown;
+  int index = 0;
   if (state == 0)
   {
     return;
@@ -1556,6 +1818,28 @@ void load_state_from_json(State* state, const char* json)
   {
     state->last_requested = field_from_text(value);
   }
+  state->history.turn_count = bounded_int(json_int(json, "\"tc\"", 0), 0, 100000);
+  (void)json_int_array(json, "\"rr\"", state->history.retry_counts, tracked_field_count);
+  while (index < tracked_field_count)
+  {
+    state->history.retry_counts[index] = bounded_int(state->history.retry_counts[index], 0, 9);
+    index += 1;
+  }
+  state->history.recent_structure_count = json_int_array(
+    json,
+    "\"rs\"",
+    state->history.recent_structure_ids,
+    max_recent_structures);
+  state->history.recent_phrase_count = json_int_array(
+    json,
+    "\"rp\"",
+    state->history.recent_phrase_ids,
+    max_recent_phrase_ids);
+  state->history.last_response_act = bounded_int(json_int(json, "\"la\"", 0), 0, 8);
+  state->history.phase = static_cast<Conversation_phase>(bounded_int(json_int(json, "\"ph\"", 0), 0, 4));
+  state->history.interrupted_field = static_cast<Field_id>(bounded_int(json_int(json, "\"if\"", static_cast<int>(field_none)), 0, static_cast<int>(field_none)));
+  state->history.caller_pace = static_cast<Caller_pace>(bounded_int(json_int(json, "\"cp\"", 0), 0, 2));
+  state->history.caller_confused = json_bool(json, "\"cc\"");
 }
 
 }

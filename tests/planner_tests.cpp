@@ -341,6 +341,64 @@ static void confirmation_state_roundtrips(void)
   expect_true(std::strcmp(loaded.call_id, "call_123") == 0, "call id roundtrips");
 }
 
+static void conversation_history_roundtrips(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::State loaded;
+  char json[2048];
+  cerebras_v3::init_state(&state);
+  state.history.turn_count = 7;
+  state.history.retry_counts[cerebras_v3::field_callback_time] = 2;
+  state.history.recent_structure_ids[0] = 2;
+  state.history.recent_structure_ids[1] = 6;
+  state.history.recent_structure_count = 2;
+  state.history.recent_phrase_ids[0] = 101;
+  state.history.recent_phrase_count = 1;
+  state.history.last_response_act = 6;
+  state.history.phase = cerebras_v3::conversation_phase_contact;
+  state.history.interrupted_field = cerebras_v3::field_caller_name;
+  state.history.caller_pace = cerebras_v3::caller_pace_rushed;
+  state.history.caller_confused = true;
+  cerebras_v3::state_to_json(&state, json, 2048);
+  cerebras_v3::load_state_from_json(&loaded, json);
+  expect_true(loaded.history.turn_count == 7, "history turn count roundtrips");
+  expect_true(loaded.history.retry_counts[cerebras_v3::field_callback_time] == 2, "history retry count roundtrips");
+  expect_true(loaded.history.recent_structure_ids[1] == 6, "history structure ids roundtrip");
+  expect_true(loaded.history.recent_structure_count == 2, "history structure count roundtrips");
+  expect_true(loaded.history.recent_phrase_ids[0] == 101, "history phrase ids roundtrip");
+  expect_true(loaded.history.last_response_act == 6, "history last act roundtrips");
+  expect_true(loaded.history.phase == cerebras_v3::conversation_phase_contact, "history phase roundtrips");
+  expect_true(loaded.history.interrupted_field == cerebras_v3::field_caller_name, "history interrupted field roundtrips");
+  expect_true(loaded.history.caller_pace == cerebras_v3::caller_pace_rushed, "history caller pace roundtrips");
+  expect_true(loaded.history.caller_confused, "history confusion flag roundtrips");
+}
+
+static void retry_tracking_distinguishes_failures_and_interruptions(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::init_state(&state);
+  state.last_requested = cerebras_v3::field_caller_name;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "customer_confusion", 64);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "what do you mean");
+  expect_true(state.history.retry_counts[cerebras_v3::field_caller_name] == 1, "confusion increments retry count");
+  expect_true(state.history.interrupted_field == cerebras_v3::field_caller_name, "confusion remembers interrupted field");
+  expect_true(state.history.caller_confused, "confusion flag is set");
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "caller_question", 64);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "are you open tomorrow");
+  expect_true(state.history.retry_counts[cerebras_v3::field_caller_name] == 1, "caller question does not increment retry count");
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "field_answer", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "name", 64);
+  cerebras_v3::copy_text(interpretation.name, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::merge_interpretation(&state, &interpretation, "Jordan Smith");
+  expect_true(state.history.retry_counts[cerebras_v3::field_caller_name] == 0, "successful answer resets retry count");
+  expect_true(state.history.interrupted_field == cerebras_v3::field_none, "successful answer clears interrupted field");
+  expect_true(state.history.turn_count == 3, "each caller turn increments turn count");
+}
+
 static void generic_vehicle_is_not_captured(void)
 {
   cerebras_v3::State state;
@@ -1004,6 +1062,8 @@ int main(void)
   ai_rejection_reasks_phone();
   kb_confirmation_phrases_advance();
   confirmation_state_roundtrips();
+  conversation_history_roundtrips();
+  retry_tracking_distinguishes_failures_and_interruptions();
   generic_vehicle_is_not_captured();
   whitelisted_vehicle_is_captured();
   normalized_vehicle_names_are_captured();
