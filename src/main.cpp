@@ -1,6 +1,8 @@
 #include <planner.h>
 #include <generated_kb.h>
 #include <prompt_sections.h>
+#include <response_ai.h>
+#include <response_renderer.h>
 #include <arpa/inet.h>
 #include <curl/curl.h>
 #include <netinet/in.h>
@@ -35,6 +37,8 @@ struct Config
   char delivery_webhook_url[256];
   char delivery_webhook_secret[128];
   bool cerebras_debug;
+  bool structured_responses;
+  bool ai_response_slots;
 };
 
 struct Buffer
@@ -418,6 +422,15 @@ static int parse_int(const char* text, int fallback)
   return any ? value : fallback;
 }
 
+static bool env_enabled(const char* value)
+{
+  return
+    (value != 0) &&
+    ((std::strcmp(value, "1") == 0) ||
+     (std::strcmp(value, "true") == 0) ||
+     (std::strcmp(value, "on") == 0));
+}
+
 static void load_config(char** envp, Config* config)
 {
   const char* value = 0;
@@ -431,6 +444,8 @@ static void load_config(char** envp, Config* config)
   clear_buffer(config->delivery_webhook_url, 256);
   clear_buffer(config->delivery_webhook_secret, 128);
   config->cerebras_debug = false;
+  config->structured_responses = false;
+  config->ai_response_slots = false;
   cerebras_v3::copy_text(config->cerebras_model, "gpt-oss-120b", 128);
   cerebras_v3::copy_text(config->cerebras_url, "https://api.cerebras.ai/v1/chat/completions", 256);
   value = find_env(envp, "PORT");
@@ -448,7 +463,11 @@ static void load_config(char** envp, Config* config)
   value = find_env(envp, "EMPLOYEE_DELIVERY_WEBHOOK_SECRET");
   if (value != 0) { cerebras_v3::copy_text(config->delivery_webhook_secret, value, 128); }
   value = find_env(envp, "CEREBRAS_DEBUG");
-  if ((value != 0) && (std::strcmp(value, "1") == 0)) { config->cerebras_debug = true; }
+  if (value != 0) { config->cerebras_debug = env_enabled(value); }
+  value = find_env(envp, "STRUCTURED_RESPONSES_ENABLED");
+  if (value != 0) { config->structured_responses = env_enabled(value); }
+  value = find_env(envp, "AI_RESPONSE_SLOTS_ENABLED");
+  if (value != 0) { config->ai_response_slots = env_enabled(value); }
 }
 
 static void extract_json_string_after(const char* text, const char* marker, char* output, int capacity)
@@ -760,6 +779,45 @@ static bool generate_opening_ack_with_cerebras(const Config* config, const char*
   append_text(user, 2048, state_json);
   append_text(user, 2048, "\nWrite the acknowledgement only.");
   return call_cerebras(config, system, user, 256, false, output, capacity);
+}
+
+struct Ai_slot_runtime
+{
+  const Config* config;
+};
+
+static bool generate_ai_slot_with_cerebras(
+  cerebras_v3::Response_act act,
+  cerebras_v3::Field_id target_field,
+  const cerebras_v3::State* state,
+  char* output,
+  int capacity,
+  void* user_data)
+{
+  Ai_slot_runtime* runtime = static_cast<Ai_slot_runtime*>(user_data);
+  char state_json[2048];
+  char system[2048];
+  char user[4096];
+  if ((runtime == 0) || (runtime->config == 0) || (state == 0))
+  {
+    return false;
+  }
+  clear_buffer(state_json, 2048);
+  clear_buffer(system, 2048);
+  clear_buffer(user, 4096);
+  cerebras_v3::state_to_json(state, state_json, 2048);
+  if (!cerebras_v3::build_ai_slot_prompts(
+        act,
+        target_field,
+        state_json,
+        system,
+        2048,
+        user,
+        4096))
+  {
+    return false;
+  }
+  return call_cerebras(runtime->config, system, user, 128, false, output, capacity);
 }
 
 static bool is_department_only_reply(const char* lowered)
@@ -1763,6 +1821,81 @@ static void clear_turn_result(Turn_result* result)
   result->delivery_sent = false;
 }
 
+static bool has_grounded_acknowledgement(
+  const cerebras_v3::State* state,
+  const cerebras_v3::Interpretation* interpretation,
+  cerebras_v3::Field_id previous_requested)
+{
+  bool meaningful_opening = false;
+  bool meaningful_answer = false;
+  if ((state == 0) || (interpretation == 0))
+  {
+    return false;
+  }
+  meaningful_opening =
+    (previous_requested == cerebras_v3::field_none) &&
+    ((state->fields[cerebras_v3::field_request].value[0] != '\0') ||
+     (state->fields[cerebras_v3::field_vehicle].value[0] != '\0'));
+  meaningful_answer =
+    (std::strcmp(interpretation->answered_field, "request") == 0) ||
+    (std::strcmp(interpretation->answered_field, "vehicle") == 0) ||
+    (std::strcmp(interpretation->answered_field, "intent") == 0);
+  return meaningful_opening || meaningful_answer;
+}
+
+static bool try_structured_response(
+  cerebras_v3::State* state,
+  const Config* config,
+  const cerebras_v3::Plan* field_plan,
+  const cerebras_v3::Interpretation* interpretation,
+  cerebras_v3::Field_id previous_requested,
+  const char* previous_response,
+  Turn_result* result)
+{
+  cerebras_v3::Response_context context;
+  cerebras_v3::Response_render_options options;
+  cerebras_v3::Response_render_result rendered;
+  Ai_slot_runtime ai_runtime;
+  const char* kb_answer = "";
+  if ((state == 0) || (config == 0) || !config->structured_responses ||
+      (field_plan == 0) || (interpretation == 0) || (result == 0))
+  {
+    return false;
+  }
+  if (interpretation->faq_id[0] != '\0')
+  {
+    kb_answer = faq_answer_for_id(interpretation->faq_id);
+  }
+  cerebras_v3::init_response_context(&context);
+  context.state = state;
+  context.field_plan = field_plan;
+  context.interpretation = interpretation;
+  context.previous_requested = previous_requested;
+  context.has_kb_answer = kb_answer[0] != '\0';
+  context.has_grounded_acknowledgement =
+    has_grounded_acknowledgement(state, interpretation, previous_requested);
+
+  cerebras_v3::init_response_render_options(&options);
+  options.kb_answer = kb_answer;
+  options.previous_response = (previous_response != 0) ? previous_response : "";
+  options.enable_ai_slots = config->ai_response_slots;
+  ai_runtime.config = config;
+  options.ai_generator = generate_ai_slot_with_cerebras;
+  options.ai_user_data = &ai_runtime;
+  if (!cerebras_v3::render_structured_response(state, &context, &options, &rendered))
+  {
+    return false;
+  }
+  cerebras_v3::copy_text(result->response_text, rendered.text, text_capacity);
+  result->used_generator = rendered.used_ai;
+  result->used_kb_answer =
+    context.has_kb_answer &&
+    ((rendered.plan.structure == cerebras_v3::response_structure_answer_ask) ||
+     (rendered.plan.structure == cerebras_v3::response_structure_answer_transition_ask));
+  cerebras_v3::state_to_json(state, result->state_json, 2048);
+  return true;
+}
+
 static void log_turn_processed(
   const char* source,
   const cerebras_v3::State* state,
@@ -1815,7 +1948,14 @@ static void process_chat_turn(
     cerebras_v3::state_to_json(state, result->state_json, 2048);
     if (plan.next_field == cerebras_v3::field_department)
     {
-      append_text(result->response_text, text_capacity, "Thanks for calling. How may I help you today?");
+      if ((config != 0) && config->structured_responses)
+      {
+        append_text(result->response_text, text_capacity, "Thanks for calling. I'm the after-hours assistant. How can I help?");
+      }
+      else
+      {
+        append_text(result->response_text, text_capacity, "Thanks for calling. How may I help you today?");
+      }
     }
     else
     {
@@ -1860,7 +2000,18 @@ static void process_chat_turn(
   plan = cerebras_v3::plan_next(state);
   state->last_requested = plan.next_field;
   cerebras_v3::state_to_json(state, result->state_json, 2048);
-  (void)build_interruption_response(state, &plan, &interpretation, result->response_text, text_capacity);
+  (void)try_structured_response(
+    state,
+    config,
+    &plan,
+    &interpretation,
+    previous_requested,
+    last_assistant,
+    result);
+  if (result->response_text[0] == '\0')
+  {
+    (void)build_interruption_response(state, &plan, &interpretation, result->response_text, text_capacity);
+  }
   if (result->response_text[0] == '\0')
   {
     (void)build_rejection_response(state, &plan, previous_requested, message, result->response_text, text_capacity);
@@ -1921,6 +2072,7 @@ static void process_chat_turn(
     }
   }
   sanitize_response_text(result->response_text, text_capacity);
+  cerebras_v3::state_to_json(state, result->state_json, 2048);
   cerebras_v3::copy_text(result->next_field, cerebras_v3::field_label(plan.next_field), 64);
   cerebras_v3::copy_text(result->turn_type, interpretation.turn_type, 64);
   cerebras_v3::copy_text(result->answered_field, interpretation.answered_field, 64);
@@ -2446,7 +2598,13 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
   clear_buffer(config_event, 256);
   append_text(config_event, 256, "{\"response_type\":\"config\",\"config\":{\"auto_reconnect\":true,\"call_details\":true}}");
   (void)websocket_send_frame(fd, 1, config_event);
-  websocket_send_retell_response(fd, 0, state.call_id, "Thanks for calling. How may I help you today?");
+  websocket_send_retell_response(
+    fd,
+    0,
+    state.call_id,
+    ((config != 0) && config->structured_responses)
+      ? "Thanks for calling. I'm the after-hours assistant. How can I help?"
+      : "Thanks for calling. How may I help you today?");
   log_json_line("websocket_open", state.call_id, "");
   while (websocket_read_text(fd, event, websocket_capacity, &opcode))
   {

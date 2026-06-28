@@ -4,6 +4,9 @@
 namespace cerebras_v3
 {
 const int max_text = 256;
+const int tracked_field_count = 10;
+const int max_recent_structures = 3;
+const int max_recent_phrase_ids = 8;
 
 enum Department
 {
@@ -36,6 +39,22 @@ enum Field_status
   status_refused = 3
 };
 
+enum Conversation_phase
+{
+  conversation_phase_opening = 0,
+  conversation_phase_discovery = 1,
+  conversation_phase_contact = 2,
+  conversation_phase_confirmation = 3,
+  conversation_phase_complete = 4
+};
+
+enum Caller_pace
+{
+  caller_pace_unknown = 0,
+  caller_pace_normal = 1,
+  caller_pace_rushed = 2
+};
+
 struct Field
 {
   char value[max_text];
@@ -44,13 +63,29 @@ struct Field
   bool confirmed;
 };
 
+struct Conversation_history
+{
+  int turn_count;
+  int retry_counts[tracked_field_count];
+  int recent_structure_ids[max_recent_structures];
+  int recent_structure_count;
+  int recent_phrase_ids[max_recent_phrase_ids];
+  int recent_phrase_count;
+  int last_response_act;
+  Conversation_phase phase;
+  Field_id interrupted_field;
+  Caller_pace caller_pace;
+  bool caller_confused;
+};
+
 struct State
 {
   char call_id[64];
   Department department;
-  Field fields[10];
+  Field fields[tracked_field_count];
   Field_id last_requested;
   bool delivery_sent;
+  Conversation_history history;
 };
 
 struct Interpretation
