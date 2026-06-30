@@ -156,6 +156,33 @@ static void prompt_sections_include_closed_labels(void)
   expect_true(cerebras_v3::generated_kb::vehicle_record_count >= 10000, "generated vehicle records exist");
 }
 
+static void generated_service_answers_are_spoken_prose(void)
+{
+  const char* loaner_answer = 0;
+  int index = 0;
+  while (index < cerebras_v3::generated_kb::faq_entry_count)
+  {
+    const cerebras_v3::generated_kb::Faq_entry& entry =
+      cerebras_v3::generated_kb::faq_entries[index];
+    expect_true(
+      (std::strstr(entry.answer, "Conditions:") == 0) &&
+      (std::strstr(entry.answer, "Limits:") == 0) &&
+      (std::strstr(entry.answer, "Notes:") == 0),
+      "generated KB answers do not expose internal section labels");
+    if (std::strcmp(entry.id, "service-loaner-vehicle") == 0)
+    {
+      loaner_answer = entry.answer;
+    }
+    index += 1;
+  }
+  expect_true(loaner_answer != 0, "loaner KB answer exists");
+  expect_true(
+    (loaner_answer != 0) &&
+    (std::strstr(loaner_answer, "Loaner vehicles may be available") != 0) &&
+    (std::strstr(loaner_answer, "Inventory is limited") != 0),
+    "loaner KB answer is conversational while preserving constraints");
+}
+
 static void name_does_not_capture_spelling_too_early(void)
 {
   cerebras_v3::State state;
@@ -1055,6 +1082,7 @@ int main(void)
   asks_only_one_question_at_a_time();
   parses_compact_json();
   prompt_sections_include_closed_labels();
+  generated_service_answers_are_spoken_prose();
   name_does_not_capture_spelling_too_early();
   spelling_captures_when_requested();
   phone_confirmation_advances();

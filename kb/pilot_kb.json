@@ -43,6 +43,7 @@
       "conditions": "Requires advisor approval and qualifying repair",
       "limits": "Limited inventory",
       "notes": "Insurance and license required",
+      "spoken_answer": "Loaner vehicles may be available for longer repairs with advisor approval. Inventory is limited, and insurance and a driver's license are required. The service team can confirm availability when they call back.",
       "keywords": [
         "loaner",
         "car",

@@ -37,6 +37,10 @@ def build_faq_prompt(kb):
 
 
 def service_entry_answer(entry):
+    spoken_answer = str(entry.get("spoken_answer", "")).strip()
+    if spoken_answer:
+        return spoken_answer
+
     title = entry.get("title", "")
     summary = entry.get("summary", "")
     availability = entry.get("availability", "")
@@ -50,12 +54,9 @@ def service_entry_answer(entry):
         parts.append(f"{title} may be available.")
     if summary:
         parts.append(summary + ".")
-    if conditions:
-        parts.append("Conditions: " + conditions + ".")
-    if limits:
-        parts.append("Limits: " + limits + ".")
-    if notes:
-        parts.append("Notes: " + notes + ".")
+    for detail in (conditions, limits, notes):
+        if detail and str(detail).strip().lower() != "none":
+            parts.append(str(detail).strip().rstrip(".") + ".")
     if availability == "conditional":
         parts.append("The service team can confirm details when they call back.")
     return " ".join(parts)
