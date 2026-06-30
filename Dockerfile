@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim AS build
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends g++ make libcurl4-openssl-dev ca-certificates \
+  && apt-get install -y --no-install-recommends g++ make python3 libcurl4-openssl-dev ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
