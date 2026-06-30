@@ -197,6 +197,113 @@ static void websocket_reader_accepts_large_transcript_frames(void)
   websocket_reader_accepts_payload(70000, true);
 }
 
+static void relative_callback_time_resolves_to_concrete_date(void)
+{
+  char output[cerebras_v3::max_text];
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "Two weeks from now at 3 PM.",
+      2026,
+      6,
+      30,
+      output,
+      cerebras_v3::max_text),
+    "two weeks from now resolves");
+  expect_text(
+    output,
+    "Tuesday, July 14, 2026 at 3 PM",
+    "relative callback becomes concrete day and time");
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "How about three PM in two weeks today?",
+      2026,
+      6,
+      30,
+      output,
+      cerebras_v3::max_text),
+    "ASR reordered relative time resolves");
+  expect_text(
+    output,
+    "Tuesday, July 14, 2026 at three PM",
+    "ASR reordered callback becomes concrete day and time");
+  expect_true(
+    !resolve_relative_callback_time_from_date(
+      "Next week at 3 PM",
+      2026,
+      6,
+      30,
+      output,
+      cerebras_v3::max_text),
+    "next week without an exact offset remains vague");
+}
+
+static void relative_callback_fallback_drives_confirmation(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_service;
+  cerebras_v3::copy_text(
+    state.fields[cerebras_v3::field_department].value,
+    "service",
+    cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  cerebras_v3::copy_text(
+    state.fields[cerebras_v3::field_intent].value,
+    "vehicle noise",
+    cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  cerebras_v3::copy_text(
+    state.fields[cerebras_v3::field_caller_name].value,
+    "Jamal Maxberg",
+    cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  cerebras_v3::copy_text(
+    state.fields[cerebras_v3::field_last_name_spelling].value,
+    "M A X B E R G",
+    cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  cerebras_v3::copy_text(
+    state.fields[cerebras_v3::field_vehicle].value,
+    "2020 Acura MDX",
+    cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_vehicle].status = cerebras_v3::status_captured;
+  cerebras_v3::copy_text(
+    state.fields[cerebras_v3::field_request].value,
+    "car making weird noise",
+    cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_request].status = cerebras_v3::status_captured;
+  state.last_requested = cerebras_v3::field_callback_time;
+  process_chat_turn(
+    &state,
+    &config,
+    "Two weeks from now at 3 PM.",
+    "What day and time works for a callback?",
+    "",
+    &result);
+  expect_true(
+    state.fields[cerebras_v3::field_callback_time].status ==
+      cerebras_v3::status_captured,
+    "relative callback fallback captures callback time");
+  expect_true(
+    std::strstr(
+      state.fields[cerebras_v3::field_callback_time].value,
+      "at 3 PM") != 0,
+    "relative callback fallback stores concrete time");
+  expect_true(
+    std::strstr(result.response_text, "at 3 PM") != 0,
+    "relative callback fallback reads back concrete time");
+  expect_true(
+    std::strchr(result.response_text, '?') != 0,
+    "relative callback fallback asks for confirmation");
+}
+
 static void response_flags_default_off_and_parse_explicit_values(void)
 {
   Config config;
@@ -279,6 +386,8 @@ int main(void)
   websocket_path_uses_first_non_secret_segment();
   websocket_path_uses_last_segment_after_static_prefix();
   websocket_reader_accepts_large_transcript_frames();
+  relative_callback_time_resolves_to_concrete_date();
+  relative_callback_fallback_drives_confirmation();
   response_flags_default_off_and_parse_explicit_values();
   structured_opening_uses_after_hours_identity();
   structured_response_composes_without_ai();
