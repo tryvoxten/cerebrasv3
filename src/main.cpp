@@ -134,6 +134,24 @@ static void lowercase_callback_text(char* output, const char* input, int capacit
   output[index] = '\0';
 }
 
+static int spoken_number_value(const char* token)
+{
+  if (token == 0) { return 0; }
+  if (std::strcmp(token, "one") == 0) { return 1; }
+  if (std::strcmp(token, "two") == 0) { return 2; }
+  if (std::strcmp(token, "three") == 0) { return 3; }
+  if (std::strcmp(token, "four") == 0) { return 4; }
+  if (std::strcmp(token, "five") == 0) { return 5; }
+  if (std::strcmp(token, "six") == 0) { return 6; }
+  if (std::strcmp(token, "seven") == 0) { return 7; }
+  if (std::strcmp(token, "eight") == 0) { return 8; }
+  if (std::strcmp(token, "nine") == 0) { return 9; }
+  if (std::strcmp(token, "ten") == 0) { return 10; }
+  if (std::strcmp(token, "eleven") == 0) { return 11; }
+  if (std::strcmp(token, "twelve") == 0) { return 12; }
+  return 0;
+}
+
 static int relative_quantity_before(const char* lowered, const char* unit)
 {
   const char* found = 0;
@@ -179,19 +197,7 @@ static int relative_quantity_before(const char* lowered, const char* unit)
     }
     return (value >= 1) && (value <= 52) ? value : 0;
   }
-  if (std::strcmp(token, "one") == 0) { return 1; }
-  if (std::strcmp(token, "two") == 0) { return 2; }
-  if (std::strcmp(token, "three") == 0) { return 3; }
-  if (std::strcmp(token, "four") == 0) { return 4; }
-  if (std::strcmp(token, "five") == 0) { return 5; }
-  if (std::strcmp(token, "six") == 0) { return 6; }
-  if (std::strcmp(token, "seven") == 0) { return 7; }
-  if (std::strcmp(token, "eight") == 0) { return 8; }
-  if (std::strcmp(token, "nine") == 0) { return 9; }
-  if (std::strcmp(token, "ten") == 0) { return 10; }
-  if (std::strcmp(token, "eleven") == 0) { return 11; }
-  if (std::strcmp(token, "twelve") == 0) { return 12; }
-  return 0;
+  return spoken_number_value(token);
 }
 
 static int relative_callback_day_offset(const char* lowered)
@@ -225,6 +231,44 @@ static int relative_callback_day_offset(const char* lowered)
   return quantity;
 }
 
+static void normalize_spoken_callback_hour(
+  const char* input,
+  char* output,
+  int capacity)
+{
+  char lowered[64];
+  char token[16];
+  char hour_text[4];
+  int index = 0;
+  int hour = 0;
+  clear_buffer(output, capacity);
+  clear_buffer(lowered, 64);
+  clear_buffer(token, 16);
+  clear_buffer(hour_text, 4);
+  if ((input == 0) || (output == 0) || (capacity <= 0))
+  {
+    return;
+  }
+  lowercase_callback_text(lowered, input, 64);
+  while ((lowered[index] != '\0') &&
+         (lowered[index] != ' ') &&
+         (index < 15))
+  {
+    token[index] = lowered[index];
+    index += 1;
+  }
+  token[index] = '\0';
+  hour = spoken_number_value(token);
+  if (hour == 0)
+  {
+    cerebras_v3::copy_text(output, input, capacity);
+    return;
+  }
+  std::snprintf(hour_text, sizeof(hour_text), "%d", hour);
+  append_text(output, capacity, hour_text);
+  append_text(output, capacity, &input[index]);
+}
+
 static bool extract_relative_callback_window(
   const char* input,
   const char* lowered,
@@ -233,6 +277,7 @@ static bool extract_relative_callback_window(
   bool* has_preposition)
 {
   const char* marker = 0;
+  char extracted[64];
   int end = 0;
   int start = 0;
   int length = 0;
@@ -242,6 +287,7 @@ static bool extract_relative_callback_window(
     return false;
   }
   clear_buffer(output, capacity);
+  clear_buffer(extracted, 64);
   *has_preposition = false;
   marker = std::strstr(lowered, " am");
   if (marker == 0)
@@ -257,12 +303,13 @@ static bool extract_relative_callback_window(
       start -= 1;
     }
     length = end - start;
-    if (length >= capacity)
+    if ((length >= capacity) || (length >= 64))
     {
       return false;
     }
-    std::memcpy(output, &input[start], static_cast<unsigned long>(length));
-    output[length] = '\0';
+    std::memcpy(extracted, &input[start], static_cast<unsigned long>(length));
+    extracted[length] = '\0';
+    normalize_spoken_callback_hour(extracted, output, capacity);
     return true;
   }
   if (std::strstr(lowered, "morning") != 0)

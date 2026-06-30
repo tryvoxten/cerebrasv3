@@ -226,8 +226,8 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "ASR reordered relative time resolves");
   expect_text(
     output,
-    "Tuesday, July 14, 2026 at three PM",
-    "ASR reordered callback becomes concrete day and time");
+    "Tuesday, July 14, 2026 at 3 PM",
+    "ASR word-based hour becomes a validated numeric time");
   expect_true(
     !resolve_relative_callback_time_from_date(
       "Next week at 3 PM",
@@ -283,7 +283,7 @@ static void relative_callback_fallback_drives_confirmation(void)
   process_chat_turn(
     &state,
     &config,
-    "Two weeks from now at 3 PM.",
+    "How about two weeks from now at three PM?",
     "What day and time works for a callback?",
     "",
     &result);
