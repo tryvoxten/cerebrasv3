@@ -1871,9 +1871,9 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
           (state->fields[cerebras_v3::field_callback_time].value[0] != '\0') &&
           !state->fields[cerebras_v3::field_callback_time].confirmed)
       {
-        append_text(output, capacity, "I have ");
+        append_text(output, capacity, "I understood that as ");
         append_text(output, capacity, state->fields[cerebras_v3::field_callback_time].value);
-        append_text(output, capacity, ". Is that correct?");
+        append_text(output, capacity, ". Is that the date and time you meant?");
       }
       else
       {

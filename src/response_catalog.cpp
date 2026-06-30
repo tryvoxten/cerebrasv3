@@ -37,8 +37,8 @@ static const Phrase_definition phrase_catalog[] =
   {262, response_act_ask, field_callback_time, department_unknown, phrase_variant_retry_question, 2, 9, "Would morning or afternoon work better?"},
   {271, response_act_ask, field_phone, department_unknown, phrase_variant_retry_question, 1, 9, "What callback number should I write down?"},
 
-  {301, response_act_ask, field_callback_time, department_unknown, phrase_variant_confirmation_question, 0, 9, "Is that callback time correct?"},
-  {302, response_act_ask, field_callback_time, department_unknown, phrase_variant_confirmation_question, 0, 9, "Does that callback time work?"},
+  {301, response_act_ask, field_callback_time, department_unknown, phrase_variant_confirmation_question, 0, 9, "Is that the date and time you meant?"},
+  {302, response_act_ask, field_callback_time, department_unknown, phrase_variant_confirmation_question, 0, 9, "Did I understand that date and time correctly?"},
   {311, response_act_ask, field_phone_confirmed, department_unknown, phrase_variant_confirmation_question, 0, 9, "Is that the correct callback number?"},
   {312, response_act_ask, field_phone_confirmed, department_unknown, phrase_variant_confirmation_question, 0, 9, "Did I get that number right?"},
   {321, response_act_ask, field_final_confirmed, department_unknown, phrase_variant_confirmation_question, 0, 9, "Do those details sound right?"},
@@ -66,7 +66,7 @@ static const Phrase_definition phrase_catalog[] =
   {701, response_act_confirm_correction, field_none, department_unknown, phrase_variant_any, 0, 9, "Thanks, I've updated that."},
   {702, response_act_confirm_correction, field_none, department_unknown, phrase_variant_any, 0, 9, "Got it, I changed that."},
 
-  {801, response_act_readback, field_callback_time, department_unknown, phrase_variant_any, 0, 9, "I have {callback_time}."},
+  {801, response_act_readback, field_callback_time, department_unknown, phrase_variant_any, 0, 9, "I understood that as {callback_time}."},
   {811, response_act_readback, field_phone_confirmed, department_unknown, phrase_variant_any, 0, 9, "I have {phone}."},
   {821, response_act_readback, field_final_confirmed, department_unknown, phrase_variant_any, 0, 9, "I have your request and callback details ready for the {department} team."},
 
