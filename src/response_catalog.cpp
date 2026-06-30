@@ -11,8 +11,8 @@ static const Phrase_definition phrase_catalog[] =
   {112, response_act_ask, field_intent, department_service, phrase_variant_initial_question, 0, 0, "What can the service team help with?"},
   {113, response_act_ask, field_intent, department_parts, phrase_variant_initial_question, 0, 0, "What part can the team help you with?"},
   {114, response_act_ask, field_intent, department_sales, phrase_variant_initial_question, 0, 0, "What are you looking for today?"},
-  {121, response_act_ask, field_caller_name, department_unknown, phrase_variant_initial_question, 0, 0, "Who should the team ask for?"},
-  {122, response_act_ask, field_caller_name, department_unknown, phrase_variant_initial_question, 0, 0, "What name should they use when they call?"},
+  {121, response_act_ask, field_caller_name, department_unknown, phrase_variant_initial_question, 0, 0, "Who should the {department} team ask for when they call back?"},
+  {122, response_act_ask, field_caller_name, department_unknown, phrase_variant_initial_question, 0, 0, "What name should the {department} team use when they call back?"},
   {123, response_act_ask, field_caller_name, department_unknown, phrase_variant_initial_question, 0, 0, "May I get your first and last name?"},
   {131, response_act_ask, field_last_name_spelling, department_unknown, phrase_variant_initial_question, 0, 0, "Could you spell your last name?"},
   {132, response_act_ask, field_last_name_spelling, department_unknown, phrase_variant_initial_question, 0, 0, "How do you spell your last name?"},
@@ -71,11 +71,11 @@ static const Phrase_definition phrase_catalog[] =
   {821, response_act_readback, field_final_confirmed, department_unknown, phrase_variant_any, 0, 9, "I have your request and callback details ready for the {department} team."},
 
   {901, response_act_answer, field_none, department_unknown, phrase_variant_any, 0, 9, "{kb_answer}"},
-  {902, response_act_answer, field_none, department_unknown, phrase_variant_any, 0, 9, "The {department} team can confirm that when they follow up."},
+  {902, response_act_answer, field_none, department_unknown, phrase_variant_any, 0, 9, "The {department} team will call you back and can confirm that then."},
 
-  {1001, response_act_close, field_none, department_unknown, phrase_variant_any, 0, 9, "Thanks. I'll pass this to the {department} team for follow-up."},
-  {1002, response_act_close, field_none, department_unknown, phrase_variant_any, 0, 9, "I have everything needed to pass this to the {department} team. Thanks for calling."},
-  {1003, response_act_close, field_none, department_unknown, phrase_variant_any, 0, 9, "I'll pass these details to the {department} team. Thanks for calling."}
+  {1001, response_act_close, field_none, department_unknown, phrase_variant_any, 0, 9, "Thanks. I'll pass this to the {department} team, and they will call you back."},
+  {1002, response_act_close, field_none, department_unknown, phrase_variant_any, 0, 9, "I have everything needed for the {department} team to call you back. Thanks for calling."},
+  {1003, response_act_close, field_none, department_unknown, phrase_variant_any, 0, 9, "I'll pass these details to the {department} team so they can call you back. Thanks for calling."}
 };
 
 void init_phrase_context(Phrase_context* context)

@@ -150,6 +150,26 @@ static void cq06_caller_question_during_collection(void)
   expect_true(question_count(result.text) == 1, "CQ-06 resumes one interrupted question");
 }
 
+static void callback_owner_is_explicit_when_caller_asks(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::Response_context context;
+  cerebras_v3::Response_render_result result;
+  prepare(&state, &interpretation, &plan, &context, cerebras_v3::field_caller_name);
+  cerebras_v3::copy_text(interpretation.turn_type, "caller_question", 64);
+  context.previous_requested = cerebras_v3::field_caller_name;
+  expect_true(render(&state, &context, "", &result), "callback owner answer renders");
+  expect_true(
+    std::strstr(result.text, "service team") != 0,
+    "callback owner names service team");
+  expect_true(
+    std::strstr(result.text, "call you back") != 0,
+    "callback owner explicitly says service team will call back");
+  expect_true(question_count(result.text) == 1, "callback owner answer resumes one question");
+}
+
 static void cq07_corrected_request(void)
 {
   cerebras_v3::State state;
@@ -191,7 +211,10 @@ static void cq09_unsupported_price_or_diagnosis(void)
   prepare(&state, &interpretation, &plan, &context, cerebras_v3::field_vehicle);
   cerebras_v3::copy_text(interpretation.turn_type, "caller_question", 64);
   expect_true(render(&state, &context, "", &result), "CQ-09 renders");
-  expect_true(std::strstr(result.text, "team can confirm") != 0, "CQ-09 safely defers unsupported answer");
+  expect_true(
+    (std::strstr(result.text, "call you back") != 0) &&
+    (std::strstr(result.text, "confirm") != 0),
+    "CQ-09 safely defers unsupported answer to callback team");
   expect_true(std::strchr(result.text, '$') == 0, "CQ-09 never invents price");
 }
 
@@ -241,6 +264,7 @@ static void cq12_final_close(void)
   expect_true(result.plan.structure == cerebras_v3::response_structure_close, "CQ-12 uses close structure");
   expect_true(question_count(result.text) == 0, "CQ-12 asks no question");
   expect_true(std::strstr(result.text, "service team") != 0, "CQ-12 names handoff team");
+  expect_true(std::strstr(result.text, "call you back") != 0, "CQ-12 states callback ownership");
 }
 
 static void recent_history_changes_repeated_wording(void)
@@ -265,6 +289,7 @@ int main(void)
   cq04_vague_callback_retry();
   cq05_customer_confusion();
   cq06_caller_question_during_collection();
+  callback_owner_is_explicit_when_caller_asks();
   cq07_corrected_request();
   cq08_unclear_audio();
   cq09_unsupported_price_or_diagnosis();

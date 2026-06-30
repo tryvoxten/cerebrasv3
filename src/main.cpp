@@ -113,6 +113,295 @@ static void current_date_text(char* output, int capacity)
   (void)std::strftime(output, static_cast<unsigned long>(capacity), "%A, %B %d, %Y", &local_time);
 }
 
+static void lowercase_callback_text(char* output, const char* input, int capacity)
+{
+  int index = 0;
+  if ((output == 0) || (capacity <= 0))
+  {
+    return;
+  }
+  output[0] = '\0';
+  if (input == 0)
+  {
+    return;
+  }
+  while ((input[index] != '\0') && (index < (capacity - 1)))
+  {
+    output[index] = static_cast<char>(
+      std::tolower(static_cast<unsigned char>(input[index])));
+    index += 1;
+  }
+  output[index] = '\0';
+}
+
+static int relative_quantity_before(const char* lowered, const char* unit)
+{
+  const char* found = 0;
+  int end = 0;
+  int start = 0;
+  int value = 0;
+  int index = 0;
+  char token[16];
+  clear_buffer(token, 16);
+  if ((lowered == 0) || (unit == 0))
+  {
+    return 0;
+  }
+  found = std::strstr(lowered, unit);
+  if (found == 0)
+  {
+    return 0;
+  }
+  end = static_cast<int>(found - lowered);
+  while ((end > 0) && (lowered[end - 1] == ' '))
+  {
+    end -= 1;
+  }
+  start = end;
+  while ((start > 0) &&
+         (std::isalnum(static_cast<unsigned char>(lowered[start - 1])) != 0))
+  {
+    start -= 1;
+  }
+  while ((start + index < end) && (index < 15))
+  {
+    token[index] = lowered[start + index];
+    index += 1;
+  }
+  token[index] = '\0';
+  if ((token[0] >= '0') && (token[0] <= '9'))
+  {
+    index = 0;
+    while ((token[index] >= '0') && (token[index] <= '9'))
+    {
+      value = (value * 10) + (token[index] - '0');
+      index += 1;
+    }
+    return (value >= 1) && (value <= 52) ? value : 0;
+  }
+  if (std::strcmp(token, "one") == 0) { return 1; }
+  if (std::strcmp(token, "two") == 0) { return 2; }
+  if (std::strcmp(token, "three") == 0) { return 3; }
+  if (std::strcmp(token, "four") == 0) { return 4; }
+  if (std::strcmp(token, "five") == 0) { return 5; }
+  if (std::strcmp(token, "six") == 0) { return 6; }
+  if (std::strcmp(token, "seven") == 0) { return 7; }
+  if (std::strcmp(token, "eight") == 0) { return 8; }
+  if (std::strcmp(token, "nine") == 0) { return 9; }
+  if (std::strcmp(token, "ten") == 0) { return 10; }
+  if (std::strcmp(token, "eleven") == 0) { return 11; }
+  if (std::strcmp(token, "twelve") == 0) { return 12; }
+  return 0;
+}
+
+static int relative_callback_day_offset(const char* lowered)
+{
+  const bool relative_marker =
+    (lowered != 0) &&
+    ((std::strstr(lowered, "from now") != 0) ||
+     (std::strstr(lowered, " week today") != 0) ||
+     (std::strstr(lowered, " weeks today") != 0) ||
+     (std::strncmp(lowered, "in ", 3) == 0) ||
+     (std::strstr(lowered, " in ") != 0));
+  int quantity = 0;
+  if (lowered == 0)
+  {
+    return 0;
+  }
+  if (std::strstr(lowered, "tomorrow") != 0)
+  {
+    return 1;
+  }
+  if (!relative_marker)
+  {
+    return 0;
+  }
+  quantity = relative_quantity_before(lowered, " week");
+  if (quantity > 0)
+  {
+    return quantity * 7;
+  }
+  quantity = relative_quantity_before(lowered, " day");
+  return quantity;
+}
+
+static bool extract_relative_callback_window(
+  const char* input,
+  const char* lowered,
+  char* output,
+  int capacity,
+  bool* has_preposition)
+{
+  const char* marker = 0;
+  int end = 0;
+  int start = 0;
+  int length = 0;
+  if ((input == 0) || (lowered == 0) || (output == 0) ||
+      (capacity <= 0) || (has_preposition == 0))
+  {
+    return false;
+  }
+  clear_buffer(output, capacity);
+  *has_preposition = false;
+  marker = std::strstr(lowered, " am");
+  if (marker == 0)
+  {
+    marker = std::strstr(lowered, " pm");
+  }
+  if (marker != 0)
+  {
+    end = static_cast<int>((marker - lowered) + 3);
+    start = static_cast<int>(marker - lowered);
+    while ((start > 0) && (lowered[start - 1] != ' '))
+    {
+      start -= 1;
+    }
+    length = end - start;
+    if (length >= capacity)
+    {
+      return false;
+    }
+    std::memcpy(output, &input[start], static_cast<unsigned long>(length));
+    output[length] = '\0';
+    return true;
+  }
+  if (std::strstr(lowered, "morning") != 0)
+  {
+    cerebras_v3::copy_text(output, "in the morning", capacity);
+    *has_preposition = true;
+    return true;
+  }
+  if (std::strstr(lowered, "afternoon") != 0)
+  {
+    cerebras_v3::copy_text(output, "in the afternoon", capacity);
+    *has_preposition = true;
+    return true;
+  }
+  if ((std::strstr(lowered, "after lunch") != 0) ||
+      (std::strstr(lowered, "after lunchtime") != 0))
+  {
+    cerebras_v3::copy_text(output, "after lunch", capacity);
+    *has_preposition = true;
+    return true;
+  }
+  if ((std::strstr(lowered, "noon") != 0) ||
+      (std::strstr(lowered, "lunchtime") != 0))
+  {
+    cerebras_v3::copy_text(output, "at noon", capacity);
+    *has_preposition = true;
+    return true;
+  }
+  return false;
+}
+
+static bool resolve_relative_callback_time_from_date(
+  const char* input,
+  int reference_year,
+  int reference_month,
+  int reference_day,
+  char* output,
+  int capacity)
+{
+  char lowered[cerebras_v3::max_text];
+  char date_text[96];
+  char window[64];
+  std::tm target;
+  int day_offset = 0;
+  bool window_has_preposition = false;
+  if ((input == 0) || (output == 0) || (capacity <= 0))
+  {
+    return false;
+  }
+  clear_buffer(output, capacity);
+  clear_buffer(lowered, cerebras_v3::max_text);
+  clear_buffer(date_text, 96);
+  clear_buffer(window, 64);
+  lowercase_callback_text(lowered, input, cerebras_v3::max_text);
+  day_offset = relative_callback_day_offset(lowered);
+  if ((day_offset <= 0) ||
+      !extract_relative_callback_window(
+        input,
+        lowered,
+        window,
+        64,
+        &window_has_preposition))
+  {
+    return false;
+  }
+  std::memset(&target, 0, sizeof(target));
+  target.tm_year = reference_year - 1900;
+  target.tm_mon = reference_month - 1;
+  target.tm_mday = reference_day + day_offset;
+  target.tm_hour = 12;
+  target.tm_isdst = -1;
+  if (std::mktime(&target) == static_cast<std::time_t>(-1))
+  {
+    return false;
+  }
+  if (std::strftime(
+        date_text,
+        static_cast<unsigned long>(sizeof(date_text)),
+        "%A, %B %d, %Y",
+        &target) == 0U)
+  {
+    return false;
+  }
+  append_text(output, capacity, date_text);
+  append_text(output, capacity, window_has_preposition ? " " : " at ");
+  append_text(output, capacity, window);
+  return output[0] != '\0';
+}
+
+static bool resolve_relative_callback_time(
+  const char* input,
+  char* output,
+  int capacity)
+{
+  const std::time_t now = std::time(0);
+  const std::tm* local_time = std::localtime(&now);
+  if (local_time == 0)
+  {
+    return false;
+  }
+  return resolve_relative_callback_time_from_date(
+    input,
+    local_time->tm_year + 1900,
+    local_time->tm_mon + 1,
+    local_time->tm_mday,
+    output,
+    capacity);
+}
+
+static void apply_relative_callback_time_fallback(
+  const cerebras_v3::State* state,
+  const char* message,
+  cerebras_v3::Interpretation* interpretation)
+{
+  char resolved[cerebras_v3::max_text];
+  clear_buffer(resolved, cerebras_v3::max_text);
+  if ((state == 0) || (interpretation == 0) ||
+      (state->last_requested != cerebras_v3::field_callback_time))
+  {
+    return;
+  }
+  if (!resolve_relative_callback_time(
+        message,
+        resolved,
+        cerebras_v3::max_text))
+  {
+    return;
+  }
+  cerebras_v3::copy_text(
+    interpretation->callback_time,
+    resolved,
+    cerebras_v3::max_text);
+  cerebras_v3::copy_text(
+    interpretation->answered_field,
+    "callback_time",
+    64);
+  cerebras_v3::copy_text(interpretation->turn_type, "field_answer", 64);
+}
+
 static bool starts_with(const char* text, const char* prefix)
 {
   bool result = false;
@@ -1626,7 +1915,23 @@ static bool build_interruption_response(
     }
     else
     {
-      append_text(output, capacity, "The team can confirm that when they follow up.");
+      append_text(output, capacity, "The ");
+      if ((state != 0) &&
+          (state->department != cerebras_v3::department_unknown))
+      {
+        append_text(
+          output,
+          capacity,
+          cerebras_v3::department_name(state->department));
+      }
+      else
+      {
+        append_text(output, capacity, "dealership");
+      }
+      append_text(
+        output,
+        capacity,
+        " team will call you back and can confirm that then.");
     }
     append_text(output, capacity, " ");
     append_text(output, capacity, question);
@@ -1978,6 +2283,7 @@ static void process_chat_turn(
     correct_faq_id_from_message(message, &interpretation);
   }
   apply_local_interpretation_fallback(state, message, &interpretation);
+  apply_relative_callback_time_fallback(state, message, &interpretation);
   if ((config != 0) && config->cerebras_debug)
   {
     std::fprintf(
