@@ -24,7 +24,7 @@ const int cerebras_payload_capacity = 16384;
 const int cerebras_system_capacity = 8192;
 const int context_capacity = 768;
 const int summary_capacity = 4096;
-const int websocket_capacity = 8192;
+const int websocket_capacity = 262144;
 const int default_port = 8080;
 
 struct Config
@@ -2446,7 +2446,20 @@ static bool websocket_read_text(int fd, char* output, int capacity, int* opcode)
   }
   else if (length == 127)
   {
-    return false;
+    unsigned char extended[8];
+    int extended_index = 0;
+    if (!read_exact(fd, extended, 8)) { return false; }
+    length = 0;
+    while (extended_index < 8)
+    {
+      const int current = static_cast<int>(extended[extended_index]);
+      if (length > (((capacity - 1) - current) / 256))
+      {
+        return false;
+      }
+      length = (length * 256) + current;
+      extended_index += 1;
+    }
   }
   if (length >= capacity)
   {
@@ -2456,18 +2469,18 @@ static bool websocket_read_text(int fd, char* output, int capacity, int* opcode)
   {
     return false;
   }
+  if ((length > 0) &&
+      !read_exact(fd, reinterpret_cast<unsigned char*>(output), length))
+  {
+    return false;
+  }
   while (index < length)
   {
-    unsigned char current = 0U;
-    if (!read_exact(fd, &current, 1))
-    {
-      return false;
-    }
     if (masked)
     {
-      current = current ^ mask[index % 4];
+      output[index] = static_cast<char>(
+        static_cast<unsigned char>(output[index]) ^ mask[index % 4]);
     }
-    output[index] = static_cast<char>(current);
     index += 1;
   }
   output[index] = '\0';

@@ -1,8 +1,38 @@
+#include <vector>
+#include <sys/wait.h>
+
 #define main retell_server_main
 #include "../src/main.cpp"
 #undef main
 
 static int failures = 0;
+
+static bool write_all_test(int fd, const unsigned char* data, int length)
+{
+  int offset = 0;
+  while (offset < length)
+  {
+    const ssize_t count = write(
+      fd,
+      &data[offset],
+      static_cast<unsigned long>(length - offset));
+    if (count <= 0)
+    {
+      return false;
+    }
+    offset += static_cast<int>(count);
+  }
+  return true;
+}
+
+static void expect_true(bool actual, const char* message)
+{
+  if (!actual)
+  {
+    std::fprintf(stderr, "FAIL: %s\n", message);
+    failures += 1;
+  }
+}
 
 static void expect_text(const char* actual, const char* expected, const char* message)
 {
@@ -64,6 +94,107 @@ static void websocket_path_uses_last_segment_after_static_prefix(void)
   set_call_id_from_websocket_path(&state, request, &config);
 
   expect_text(state.call_id, "retell-call-789", "last path segment becomes the Retell call ID");
+}
+
+static void websocket_reader_accepts_payload(int payload_length, bool use_64_bit_length)
+{
+  int sockets[2];
+  const int header_length = use_64_bit_length ? 14 : 8;
+  std::vector<unsigned char> frame(
+    static_cast<std::size_t>(header_length + payload_length));
+  std::vector<char> output(static_cast<std::size_t>(websocket_capacity));
+  const unsigned char mask[4] = {17U, 34U, 51U, 68U};
+  int payload_offset = 0;
+  int index = 0;
+  int opcode = 0;
+  int encoded_length = payload_length;
+  pid_t writer = -1;
+  int writer_status = 0;
+  if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0)
+  {
+    expect_true(false, "large frame test creates socket pair");
+    return;
+  }
+  frame[0] = 129U;
+  if (use_64_bit_length)
+  {
+    frame[1] = 255U;
+    index = 0;
+    while (index < 8)
+    {
+      frame[static_cast<std::size_t>(9 - index)] =
+        static_cast<unsigned char>(encoded_length & 255);
+      encoded_length = encoded_length / 256;
+      index += 1;
+    }
+    payload_offset = 10;
+  }
+  else
+  {
+    frame[1] = 254U;
+    frame[2] = static_cast<unsigned char>((payload_length >> 8) & 255);
+    frame[3] = static_cast<unsigned char>(payload_length & 255);
+    payload_offset = 4;
+  }
+  index = 0;
+  while (index < 4)
+  {
+    frame[static_cast<std::size_t>(payload_offset + index)] = mask[index];
+    index += 1;
+  }
+  payload_offset += 4;
+  index = 0;
+  while (index < payload_length)
+  {
+    const unsigned char value = static_cast<unsigned char>('a' + (index % 26));
+    frame[static_cast<std::size_t>(payload_offset + index)] =
+      static_cast<unsigned char>(value ^ mask[index % 4]);
+    index += 1;
+  }
+  writer = fork();
+  if (writer == 0)
+  {
+    const bool wrote = write_all_test(
+      sockets[0],
+      &frame[0],
+      header_length + payload_length);
+    close(sockets[0]);
+    close(sockets[1]);
+    _exit(wrote ? 0 : 1);
+  }
+  if (writer < 0)
+  {
+    expect_true(false, "large frame test starts writer process");
+    close(sockets[0]);
+    close(sockets[1]);
+    return;
+  }
+  close(sockets[0]);
+  expect_true(
+    websocket_read_text(sockets[1], &output[0], websocket_capacity, &opcode),
+    "large WebSocket frame is accepted");
+  expect_true(opcode == 1, "large WebSocket frame preserves text opcode");
+  expect_true(output[0] == 'a', "large WebSocket frame unmasks first byte");
+  expect_true(
+    output[static_cast<std::size_t>(payload_length - 1)] ==
+      static_cast<char>('a' + ((payload_length - 1) % 26)),
+    "large WebSocket frame unmasks final byte");
+  expect_true(
+    output[static_cast<std::size_t>(payload_length)] == '\0',
+    "large WebSocket frame is null terminated");
+  close(sockets[1]);
+  expect_true(
+    waitpid(writer, &writer_status, 0) == writer,
+    "large frame test waits for writer process");
+  expect_true(
+    WIFEXITED(writer_status) && (WEXITSTATUS(writer_status) == 0),
+    "large WebSocket frame writes completely");
+}
+
+static void websocket_reader_accepts_large_transcript_frames(void)
+{
+  websocket_reader_accepts_payload(12000, false);
+  websocket_reader_accepts_payload(70000, true);
 }
 
 static void response_flags_default_off_and_parse_explicit_values(void)
@@ -147,6 +278,7 @@ int main(void)
   websocket_path_skips_full_length_secret();
   websocket_path_uses_first_non_secret_segment();
   websocket_path_uses_last_segment_after_static_prefix();
+  websocket_reader_accepts_large_transcript_frames();
   response_flags_default_off_and_parse_explicit_values();
   structured_opening_uses_after_hours_identity();
   structured_response_composes_without_ai();
