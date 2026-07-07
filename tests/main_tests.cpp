@@ -380,6 +380,101 @@ static void structured_response_composes_without_ai(void)
   }
 }
 
+static void completed_intake_ends_retell_call(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  char response[2048];
+  int field = cerebras_v3::field_department;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_service;
+  while (field < cerebras_v3::field_none)
+  {
+    state.fields[field].status = cerebras_v3::status_captured;
+    cerebras_v3::copy_text(state.fields[field].value, "captured", cerebras_v3::max_text);
+    field += 1;
+  }
+  state.fields[cerebras_v3::field_callback_time].confirmed = true;
+  state.fields[cerebras_v3::field_phone_confirmed].confirmed = true;
+  state.fields[cerebras_v3::field_final_confirmed].confirmed = true;
+
+  process_chat_turn(&state, &config, "Yes, that's correct.", "Do those details sound right?", "", &result);
+  expect_true(result.end_call, "completed intake marks the Retell call for ending");
+
+  build_retell_response_json(response, 2048, 12, "call-123", result.response_text, result.end_call);
+  expect_true(
+    std::strstr(response, "\"content_complete\":true,\"end_call\":true}") != 0,
+    "completed intake sends Retell end_call true");
+}
+
+static void retell_call_details_select_customer_number(void)
+{
+  char number[64];
+  caller_number_from_retell_details(
+    "{\"interaction_type\":\"call_details\",\"call\":{\"direction\":\"inbound\",\"from_number\":\"+16472121234\",\"to_number\":\"+14165550100\"}}",
+    number,
+    64);
+  expect_text(number, "16472121234", "inbound call details select the caller number");
+
+  caller_number_from_retell_details(
+    "{\"interaction_type\":\"call_details\",\"call\":{\"direction\":\"outbound\",\"from_number\":\"+14165550100\",\"to_number\":\"+16472121234\"}}",
+    number,
+    64);
+  expect_text(number, "16472121234", "outbound call details select the customer number");
+
+  caller_number_from_retell_details(
+    "{\"interaction_type\":\"call_details\",\"call\":{\"call_type\":\"web_call\"}}",
+    number,
+    64);
+  expect_text(number, "", "web calls have no customer phone number");
+}
+
+static void calling_number_question_uses_metadata_or_requests_dictation(void)
+{
+  cerebras_v3::State state;
+  Turn_result result;
+  cerebras_v3::init_state(&state);
+  state.last_requested = cerebras_v3::field_phone;
+
+  expect_true(
+    handle_calling_number_request(
+      &state,
+      "Could you check what number this is?",
+      "16472121234",
+      &result),
+    "calling-number question is handled directly");
+  expect_text(
+    state.fields[cerebras_v3::field_phone].value,
+    "16472121234",
+    "Retell caller number becomes the proposed callback number");
+  expect_true(
+    state.last_requested == cerebras_v3::field_phone_confirmed,
+    "metadata number advances to confirmation");
+  expect_true(
+    std::strstr(result.response_text, "number showing for this call") != 0,
+    "phone call reads back the detected number");
+
+  cerebras_v3::init_state(&state);
+  state.last_requested = cerebras_v3::field_phone;
+  expect_true(
+    handle_calling_number_request(
+      &state,
+      "Can you check what number I'm calling from?",
+      "",
+      &result),
+    "web-call number question is handled directly");
+  expect_true(
+    std::strstr(result.response_text, "can't see a phone number") != 0,
+    "missing metadata asks the caller to dictate the number");
+  expect_true(
+    state.last_requested == cerebras_v3::field_phone,
+    "missing metadata keeps the phone collection step active");
+}
+
 int main(void)
 {
   websocket_path_skips_full_length_secret();
@@ -391,6 +486,9 @@ int main(void)
   response_flags_default_off_and_parse_explicit_values();
   structured_opening_uses_after_hours_identity();
   structured_response_composes_without_ai();
+  completed_intake_ends_retell_call();
+  retell_call_details_select_customer_number();
+  calling_number_question_uses_metadata_or_requests_dictation();
   if (failures == 0)
   {
     std::printf("main_tests: PASS\n");

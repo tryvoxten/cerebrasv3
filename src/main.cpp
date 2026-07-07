@@ -62,6 +62,7 @@ struct Turn_result
   bool used_kb_answer;
   bool delivery_attempted;
   bool delivery_sent;
+  bool end_call;
 };
 
 static bool json_value(const char* json, const char* key, char* output, int capacity);
@@ -2171,6 +2172,110 @@ static void clear_turn_result(Turn_result* result)
   result->used_kb_answer = false;
   result->delivery_attempted = false;
   result->delivery_sent = false;
+  result->end_call = false;
+}
+
+static bool caller_asks_for_calling_number(const char* message)
+{
+  char lowered[text_capacity];
+  lowercase_text(lowered, message, text_capacity);
+  return
+    contains_text(lowered, "number") &&
+    (contains_text(lowered, "what number") ||
+     contains_text(lowered, "which number") ||
+     contains_text(lowered, "check") ||
+     contains_text(lowered, "calling from") ||
+     contains_text(lowered, "this is"));
+}
+
+static void phone_digits_only(char* output, const char* input, int capacity)
+{
+  int input_index = 0;
+  int output_index = 0;
+  clear_buffer(output, capacity);
+  if ((output == 0) || (input == 0) || (capacity <= 0))
+  {
+    return;
+  }
+  while ((input[input_index] != '\0') && (output_index < (capacity - 1)))
+  {
+    if ((input[input_index] >= '0') && (input[input_index] <= '9'))
+    {
+      output[output_index] = input[input_index];
+      output_index += 1;
+    }
+    input_index += 1;
+  }
+  output[output_index] = '\0';
+}
+
+static void caller_number_from_retell_details(
+  const char* event,
+  char* output,
+  int capacity)
+{
+  char direction[32];
+  char number[text_capacity];
+  clear_buffer(output, capacity);
+  clear_buffer(direction, 32);
+  clear_buffer(number, text_capacity);
+  if ((event == 0) || !contains_text(event, "\"call_details\""))
+  {
+    return;
+  }
+  (void)json_value(event, "\"direction\"", direction, 32);
+  if (std::strcmp(direction, "outbound") == 0)
+  {
+    (void)json_value(event, "\"to_number\"", number, text_capacity);
+  }
+  else
+  {
+    (void)json_value(event, "\"from_number\"", number, text_capacity);
+  }
+  phone_digits_only(output, number, capacity);
+}
+
+static bool handle_calling_number_request(
+  cerebras_v3::State* state,
+  const char* caller_text,
+  const char* retell_caller_number,
+  Turn_result* result)
+{
+  if ((state == 0) || (result == 0) ||
+      (state->last_requested != cerebras_v3::field_phone) ||
+      !caller_asks_for_calling_number(caller_text))
+  {
+    return false;
+  }
+  clear_turn_result(result);
+  result->used_interpreter = false;
+  cerebras_v3::copy_text(result->turn_type, "caller_question", 64);
+  cerebras_v3::copy_text(result->answered_field, "none", 64);
+  if ((retell_caller_number != 0) && (retell_caller_number[0] != '\0'))
+  {
+    cerebras_v3::copy_text(
+      state->fields[cerebras_v3::field_phone].value,
+      retell_caller_number,
+      cerebras_v3::max_text);
+    state->fields[cerebras_v3::field_phone].status = cerebras_v3::status_captured;
+    state->fields[cerebras_v3::field_phone].confidence = 100;
+    state->fields[cerebras_v3::field_phone].confirmed = false;
+    state->last_requested = cerebras_v3::field_phone_confirmed;
+    append_text(result->response_text, text_capacity, "The number showing for this call is ");
+    append_text(result->response_text, text_capacity, retell_caller_number);
+    append_text(result->response_text, text_capacity, ". Is that the best number for the team to call?");
+    cerebras_v3::copy_text(result->next_field, "phone_confirmed", 64);
+  }
+  else
+  {
+    cerebras_v3::copy_text(
+      result->response_text,
+      "I can't see a phone number for this call. Please say the best number for the team to call.",
+      text_capacity);
+    cerebras_v3::copy_text(result->next_field, "phone", 64);
+  }
+  cerebras_v3::state_to_json(state, result->state_json, 2048);
+  return true;
 }
 
 static bool has_grounded_acknowledgement(
@@ -2412,6 +2517,7 @@ static void process_chat_turn(
   }
   if (plan.complete)
   {
+    result->end_call = true;
     build_employee_summary_json(state, result->employee_summary, summary_capacity);
     if (!state->delivery_sent && (config != 0) && (config->delivery_webhook_url[0] != '\0'))
     {
@@ -2908,21 +3014,38 @@ static void latest_user_from_retell_event(const char* event, char* output, int c
   }
 }
 
-static void websocket_send_retell_response(int fd, int response_id, const char* call_id, const char* content)
+static void build_retell_response_json(
+  char* response,
+  int capacity,
+  int response_id,
+  const char* call_id,
+  const char* content,
+  bool end_call)
 {
-  char response[2048];
   char id_text[32];
-  clear_buffer(response, 2048);
+  clear_buffer(response, capacity);
   clear_buffer(id_text, 32);
   snprintf(id_text, sizeof(id_text), "%d", response_id);
-  append_text(response, 2048, "{\"response_type\":\"response\",\"response_id\":");
-  append_text(response, 2048, id_text);
-  append_text(response, 2048, ",\"call_id\":\"");
-  json_escape_append(response, 2048, (call_id != 0) ? call_id : "");
-  append_text(response, 2048, "\"");
-  append_text(response, 2048, ",\"content\":\"");
-  json_escape_append(response, 2048, content);
-  append_text(response, 2048, "\",\"content_complete\":true,\"end_call\":false}");
+  append_text(response, capacity, "{\"response_type\":\"response\",\"response_id\":");
+  append_text(response, capacity, id_text);
+  append_text(response, capacity, ",\"call_id\":\"");
+  json_escape_append(response, capacity, (call_id != 0) ? call_id : "");
+  append_text(response, capacity, "\"");
+  append_text(response, capacity, ",\"content\":\"");
+  json_escape_append(response, capacity, content);
+  append_text(response, capacity, "\",\"content_complete\":true,\"end_call\":");
+  append_text(response, capacity, end_call ? "true}" : "false}");
+}
+
+static void websocket_send_retell_response(
+  int fd,
+  int response_id,
+  const char* call_id,
+  const char* content,
+  bool end_call)
+{
+  char response[2048];
+  build_retell_response_json(response, 2048, response_id, call_id, content, end_call);
   (void)websocket_send_frame(fd, 1, response);
 }
 
@@ -2951,10 +3074,12 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
   char event[websocket_capacity];
   char caller_text[text_capacity];
   char last_assistant[text_capacity];
+  char retell_caller_number[text_capacity];
   char config_event[256];
   int opcode = 0;
   cerebras_v3::init_state(&state);
   clear_buffer(last_assistant, text_capacity);
+  clear_buffer(retell_caller_number, text_capacity);
   set_call_id_from_websocket_path(&state, request, config);
   if (!websocket_handshake(fd, request))
   {
@@ -2970,7 +3095,8 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
     state.call_id,
     ((config != 0) && config->structured_responses)
       ? "Thanks for calling. I'm the after-hours assistant. How can I help?"
-      : "Thanks for calling. How may I help you today?");
+      : "Thanks for calling. How may I help you today?",
+    false);
   log_json_line("websocket_open", state.call_id, "");
   while (websocket_read_text(fd, event, websocket_capacity, &opcode))
   {
@@ -2985,7 +3111,14 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
     }
     else if (opcode == 1)
     {
-      if (contains_text(event, "\"response_required\"") ||
+      if (contains_text(event, "\"call_details\""))
+      {
+        caller_number_from_retell_details(
+          event,
+          retell_caller_number,
+          text_capacity);
+      }
+      else if (contains_text(event, "\"response_required\"") ||
           contains_text(event, "\"reminder_required\""))
       {
         Turn_result result;
@@ -3001,9 +3134,21 @@ static void handle_llm_websocket(int fd, const char* request, const Config* conf
           append_json_string_field(extra, 128, "trigger", contains_text(event, "\"reminder_required\"") ? "reminder_required" : "response_required");
           log_json_line("websocket_response_required", state.call_id, extra);
         }
-        process_chat_turn(&state, config, caller_text, last_assistant, "", &result);
+        if (!handle_calling_number_request(
+              &state,
+              caller_text,
+              retell_caller_number,
+              &result))
+        {
+          process_chat_turn(&state, config, caller_text, last_assistant, "", &result);
+        }
         log_turn_processed("websocket", &state, &result, caller_text);
-        websocket_send_retell_response(fd, response_id, state.call_id, result.response_text);
+        websocket_send_retell_response(
+          fd,
+          response_id,
+          state.call_id,
+          result.response_text,
+          result.end_call);
         {
           char extra[128];
           clear_buffer(extra, 128);
