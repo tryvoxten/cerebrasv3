@@ -411,6 +411,41 @@ static void completed_intake_ends_retell_call(void)
     "completed intake sends Retell end_call true");
 }
 
+static void completed_intake_reads_back_details_when_asked(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  int field = cerebras_v3::field_department;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_service;
+  while (field < cerebras_v3::field_none)
+  {
+    state.fields[field].status = cerebras_v3::status_captured;
+    cerebras_v3::copy_text(state.fields[field].value, "captured", cerebras_v3::max_text);
+    field += 1;
+  }
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_request].value, "weird noise", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_vehicle].value, "2012 Acura MDX", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "July 8, 2026", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "3:00 PM", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_phone].value, "6472121234", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_callback_time].confirmed = true;
+  state.fields[cerebras_v3::field_phone_confirmed].confirmed = true;
+  state.fields[cerebras_v3::field_final_confirmed].confirmed = true;
+
+  process_chat_turn(&state, &config, "Well, what are they?", "Is everything correct?", "", &result);
+  expect_true(result.end_call, "detail readback still marks the Retell call for ending");
+  expect_true(std::strstr(result.response_text, "weird noise") != 0, "detail readback includes request");
+  expect_true(std::strstr(result.response_text, "2012 Acura MDX") != 0, "detail readback includes vehicle");
+  expect_true(std::strstr(result.response_text, "July 8, 2026 3:00 PM") != 0, "detail readback includes callback slot");
+  expect_true(std::strstr(result.response_text, "6472121234") != 0, "detail readback includes callback number");
+  expect_true(std::strchr(result.response_text, '?') == 0, "detail readback does not restart questioning");
+}
+
 static void retell_call_details_select_customer_number(void)
 {
   char number[64];
@@ -487,6 +522,7 @@ int main(void)
   structured_opening_uses_after_hours_identity();
   structured_response_composes_without_ai();
   completed_intake_ends_retell_call();
+  completed_intake_reads_back_details_when_asked();
   retell_call_details_select_customer_number();
   calling_number_question_uses_metadata_or_requests_dictation();
   if (failures == 0)

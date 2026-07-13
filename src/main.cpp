@@ -1681,6 +1681,32 @@ static bool latest_caller_looks_like_question(const char* message, const cerebra
   return result;
 }
 
+static bool caller_asks_for_collected_details(const char* message, const cerebras_v3::Interpretation* interpretation)
+{
+  char lowered[text_capacity];
+  if (message == 0)
+  {
+    return false;
+  }
+  lowercase_text(lowered, message, text_capacity);
+  return
+    contains_text(lowered, "what are they") ||
+    contains_text(lowered, "what are the details") ||
+    contains_text(lowered, "what details") ||
+    contains_text(lowered, "what did i provide") ||
+    contains_text(lowered, "what have i provided") ||
+    contains_text(lowered, "what information") ||
+    contains_text(lowered, "what info") ||
+    contains_text(lowered, "what do you have") ||
+    contains_text(lowered, "what did you get") ||
+    contains_text(lowered, "can you repeat") ||
+    contains_text(lowered, "repeat the details") ||
+    ((interpretation != 0) &&
+     (interpretation->faq_question[0] != '\0') &&
+     (contains_text(interpretation->faq_question, "details") ||
+      contains_text(interpretation->faq_question, "provided")));
+}
+
 static bool message_matches_faq_alias(const char* lowered_message, const char* faq_id)
 {
   int index = 0;
@@ -1958,6 +1984,62 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
       break;
   }
   return false;
+}
+
+static bool append_collected_details_readback(const cerebras_v3::State* state, char* output, int capacity)
+{
+  bool wrote_detail = false;
+  if ((state == 0) || (output == 0) || (capacity <= 0))
+  {
+    return false;
+  }
+  append_text(output, capacity, "I have ");
+  if (state->department == cerebras_v3::department_service)
+  {
+    append_text(output, capacity, "a service request");
+  }
+  else if (state->department == cerebras_v3::department_parts)
+  {
+    append_text(output, capacity, "a parts request");
+  }
+  else if (state->department == cerebras_v3::department_sales)
+  {
+    append_text(output, capacity, "a sales request");
+  }
+  else
+  {
+    append_text(output, capacity, "your request");
+  }
+  if (state->fields[cerebras_v3::field_request].value[0] != '\0')
+  {
+    append_text(output, capacity, " about ");
+    append_clean_field(output, capacity, state->fields[cerebras_v3::field_request].value);
+    wrote_detail = true;
+  }
+  if (state->fields[cerebras_v3::field_vehicle].value[0] != '\0')
+  {
+    append_text(output, capacity, " for your ");
+    append_clean_field(output, capacity, state->fields[cerebras_v3::field_vehicle].value);
+    wrote_detail = true;
+  }
+  if ((state->fields[cerebras_v3::field_callback_date].value[0] != '\0') ||
+      (state->fields[cerebras_v3::field_callback_time].value[0] != '\0'))
+  {
+    append_text(output, capacity, ", with a callback ");
+    append_callback_datetime_clean(state, output, capacity);
+    wrote_detail = true;
+  }
+  if (state->fields[cerebras_v3::field_phone].value[0] != '\0')
+  {
+    append_text(output, capacity, ", at ");
+    append_clean_field(output, capacity, state->fields[cerebras_v3::field_phone].value);
+    wrote_detail = true;
+  }
+  append_text(output, capacity, ". ");
+  append_text(output, capacity, "I'll pass that to the ");
+  append_text(output, capacity, cerebras_v3::department_name(state->department));
+  append_text(output, capacity, " team so they can call you back.");
+  return wrote_detail;
 }
 
 static bool build_interruption_response(
@@ -2520,14 +2602,23 @@ static void process_chat_turn(
   plan = cerebras_v3::plan_next(state);
   state->last_requested = plan.next_field;
   cerebras_v3::state_to_json(state, result->state_json, 2048);
-  (void)try_structured_response(
-    state,
-    config,
-    &plan,
-    &interpretation,
-    previous_requested,
-    last_assistant,
-    result);
+  if (plan.complete && caller_asks_for_collected_details(message, &interpretation))
+  {
+    cerebras_v3::copy_text(interpretation.turn_type, "caller_question", 64);
+    cerebras_v3::copy_text(interpretation.answered_field, "none", 64);
+    (void)append_collected_details_readback(state, result->response_text, text_capacity);
+  }
+  if (result->response_text[0] == '\0')
+  {
+    (void)try_structured_response(
+      state,
+      config,
+      &plan,
+      &interpretation,
+      previous_requested,
+      last_assistant,
+      result);
+  }
   if (result->response_text[0] == '\0')
   {
     (void)build_interruption_response(state, &plan, &interpretation, result->response_text, text_capacity);
