@@ -428,7 +428,8 @@ static void apply_relative_callback_time_fallback(
   char resolved[cerebras_v3::max_text];
   clear_buffer(resolved, cerebras_v3::max_text);
   if ((state == 0) || (interpretation == 0) ||
-      (state->last_requested != cerebras_v3::field_callback_time))
+      ((state->last_requested != cerebras_v3::field_callback_date) &&
+       (state->last_requested != cerebras_v3::field_callback_time)))
   {
     return;
   }
@@ -1405,7 +1406,24 @@ static void apply_local_interpretation_fallback(
 
 static void build_employee_summary_json(const cerebras_v3::State* state, char* output, int capacity)
 {
+  char callback_datetime[cerebras_v3::max_text * 2];
   clear_buffer(output, capacity);
+  clear_buffer(callback_datetime, cerebras_v3::max_text * 2);
+  if (state != 0)
+  {
+    append_text(callback_datetime, cerebras_v3::max_text * 2, state->fields[cerebras_v3::field_callback_date].value);
+    if ((state->fields[cerebras_v3::field_callback_date].value[0] != '\0') &&
+        (state->fields[cerebras_v3::field_callback_time].value[0] != '\0') &&
+        (std::strcmp(state->fields[cerebras_v3::field_callback_date].value, state->fields[cerebras_v3::field_callback_time].value) != 0))
+    {
+      append_text(callback_datetime, cerebras_v3::max_text * 2, " ");
+    }
+    if ((state->fields[cerebras_v3::field_callback_time].value[0] != '\0') &&
+        (std::strcmp(state->fields[cerebras_v3::field_callback_date].value, state->fields[cerebras_v3::field_callback_time].value) != 0))
+    {
+      append_text(callback_datetime, cerebras_v3::max_text * 2, state->fields[cerebras_v3::field_callback_time].value);
+    }
+  }
   append_text(output, capacity, "{\"event\":\"call_summary_ready\"");
   append_text(output, capacity, ",\"call_id\":\"");
   json_escape_append(output, capacity, (state != 0) ? state->call_id : "");
@@ -1443,7 +1461,9 @@ static void build_employee_summary_json(const cerebras_v3::State* state, char* o
   append_text(output, capacity, "\",\"intent\":\"");
   json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_intent].value : "");
   append_text(output, capacity, "\",\"callback_time\":\"");
-  json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_callback_time].value : "");
+  json_escape_append(output, capacity, callback_datetime);
+  append_text(output, capacity, "\",\"callback_date\":\"");
+  json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_callback_date].value : "");
   append_text(output, capacity, "\",\"phone\":\"");
   json_escape_append(output, capacity, (state != 0) ? state->fields[cerebras_v3::field_phone].value : "");
   append_text(output, capacity, "\",\"phone_confirmed\":");
@@ -1791,6 +1811,27 @@ static void append_clean_field(char* output, int capacity, const char* value)
   append_text(output, capacity, cleaned);
 }
 
+static void append_callback_datetime_clean(const cerebras_v3::State* state, char* output, int capacity)
+{
+  if (state == 0)
+  {
+    return;
+  }
+  if (state->fields[cerebras_v3::field_callback_date].value[0] != '\0')
+  {
+    append_clean_field(output, capacity, state->fields[cerebras_v3::field_callback_date].value);
+  }
+  if ((state->fields[cerebras_v3::field_callback_time].value[0] != '\0') &&
+      (std::strcmp(state->fields[cerebras_v3::field_callback_date].value, state->fields[cerebras_v3::field_callback_time].value) != 0))
+  {
+    if (state->fields[cerebras_v3::field_callback_date].value[0] != '\0')
+    {
+      append_text(output, capacity, " ");
+    }
+    append_clean_field(output, capacity, state->fields[cerebras_v3::field_callback_time].value);
+  }
+}
+
 static void append_final_confirmation(const cerebras_v3::State* state, char* output, int capacity)
 {
   append_text(output, capacity, "I have you down for ");
@@ -1820,10 +1861,11 @@ static void append_final_confirmation(const cerebras_v3::State* state, char* out
     append_text(output, capacity, " about ");
     append_clean_field(output, capacity, state->fields[cerebras_v3::field_request].value);
   }
-  if (state->fields[cerebras_v3::field_callback_time].value[0] != '\0')
+  if ((state->fields[cerebras_v3::field_callback_date].value[0] != '\0') ||
+      (state->fields[cerebras_v3::field_callback_time].value[0] != '\0'))
   {
     append_text(output, capacity, " for ");
-    append_clean_field(output, capacity, state->fields[cerebras_v3::field_callback_time].value);
+    append_callback_datetime_clean(state, output, capacity);
   }
   if (state->fields[cerebras_v3::field_vehicle].value[0] != '\0')
   {
@@ -1865,7 +1907,21 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
       }
       return true;
     case cerebras_v3::field_request:
-      cerebras_v3::copy_text(output, "What should I note for the team?", capacity);
+      if ((state != 0) && (state->department == cerebras_v3::department_parts))
+      {
+        cerebras_v3::copy_text(output, "Which specific part should the parts team check?", capacity);
+      }
+      else if ((state != 0) && (state->department == cerebras_v3::department_sales))
+      {
+        cerebras_v3::copy_text(output, "Any specific model or type of car?", capacity);
+      }
+      else
+      {
+        cerebras_v3::copy_text(output, "What should I note for the team?", capacity);
+      }
+      return true;
+    case cerebras_v3::field_callback_date:
+      cerebras_v3::copy_text(output, "What date or day works best for a callback?", capacity);
       return true;
     case cerebras_v3::field_callback_time:
       if ((state != 0) &&
@@ -1873,12 +1929,12 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
           !state->fields[cerebras_v3::field_callback_time].confirmed)
       {
         append_text(output, capacity, "I understood that as ");
-        append_text(output, capacity, state->fields[cerebras_v3::field_callback_time].value);
+        append_callback_datetime_clean(state, output, capacity);
         append_text(output, capacity, ". Is that the date and time you meant?");
       }
       else
       {
-        cerebras_v3::copy_text(output, "What day and time between 9 AM and 5 PM works best for a callback?", capacity);
+        cerebras_v3::copy_text(output, "What time between 9 AM and 5 PM works best that day?", capacity);
       }
       return true;
     case cerebras_v3::field_phone:
@@ -1941,6 +1997,9 @@ static bool build_interruption_response(
         break;
       case cerebras_v3::field_request:
         append_text(output, capacity, "I am asking what the team should know. ");
+        break;
+      case cerebras_v3::field_callback_date:
+        append_text(output, capacity, "I am asking what date or day works for the callback. ");
         break;
       case cerebras_v3::field_callback_time:
         append_text(output, capacity, "I am asking when the team should call back. ");
@@ -2064,8 +2123,11 @@ static bool build_rejection_response(
     case cerebras_v3::field_request:
       append_text(output, capacity, "I need a short description of what the team should help with. ");
       break;
+    case cerebras_v3::field_callback_date:
+      append_text(output, capacity, "I need a specific callback date or day. ");
+      break;
     case cerebras_v3::field_callback_time:
-      append_text(output, capacity, "I need a callback day and time between 9 AM and 5 PM. ");
+      append_text(output, capacity, "I need a callback time between 9 AM and 5 PM. ");
       break;
     case cerebras_v3::field_phone:
       append_text(output, capacity, "I need a callback number with at least seven digits. ");

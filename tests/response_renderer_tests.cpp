@@ -65,7 +65,9 @@ static void readback_response_contains_exact_value(void)
   cerebras_v3::Response_render_options options;
   cerebras_v3::Response_render_result result;
   prepare(&state, &interpretation, &field_plan, &context, cerebras_v3::field_callback_time);
-  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "Friday afternoon", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "Friday", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_callback_date].status = cerebras_v3::status_captured;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "afternoon", cerebras_v3::max_text);
   state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
   cerebras_v3::init_response_render_options(&options);
   expect_true(cerebras_v3::render_structured_response(&state, &context, &options, &result), "callback readback response renders");

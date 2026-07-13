@@ -4,7 +4,7 @@
 namespace cerebras_v3
 {
 const int max_text = 256;
-const int tracked_field_count = 10;
+const int tracked_field_count = 11;
 const int max_recent_structures = 3;
 const int max_recent_phrase_ids = 8;
 
@@ -24,11 +24,12 @@ enum Field_id
   field_last_name_spelling = 3,
   field_vehicle = 4,
   field_request = 5,
-  field_callback_time = 6,
-  field_phone = 7,
-  field_phone_confirmed = 8,
-  field_final_confirmed = 9,
-  field_none = 10
+  field_callback_date = 6,
+  field_callback_time = 7,
+  field_phone = 8,
+  field_phone_confirmed = 9,
+  field_final_confirmed = 10,
+  field_none = 11
 };
 
 enum Field_status
@@ -97,6 +98,7 @@ struct Interpretation
   char intent[max_text];
   char vehicle[max_text];
   char request[max_text];
+  char callback_date[max_text];
   char callback_time[max_text];
   char phone[max_text];
   char name[max_text];

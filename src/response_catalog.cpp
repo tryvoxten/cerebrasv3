@@ -9,7 +9,7 @@ static const Phrase_definition phrase_catalog[] =
   {102, response_act_ask, field_department, department_unknown, phrase_variant_initial_question, 0, 0, "Which team do you need: service, parts, or sales?"},
   {111, response_act_ask, field_intent, department_unknown, phrase_variant_initial_question, 0, 0, "What can the team help with?"},
   {112, response_act_ask, field_intent, department_service, phrase_variant_initial_question, 0, 0, "What can the service team help with?"},
-  {113, response_act_ask, field_intent, department_parts, phrase_variant_initial_question, 0, 0, "What part can the team help you with?"},
+  {113, response_act_ask, field_intent, department_parts, phrase_variant_initial_question, 0, 0, "What can the parts team help with?"},
   {114, response_act_ask, field_intent, department_sales, phrase_variant_initial_question, 0, 0, "What are you looking for today?"},
   {121, response_act_ask, field_caller_name, department_unknown, phrase_variant_initial_question, 0, 0, "Who should the {department} team ask for when they call back?"},
   {122, response_act_ask, field_caller_name, department_unknown, phrase_variant_initial_question, 0, 0, "What name should the {department} team use when they call back?"},
@@ -19,9 +19,12 @@ static const Phrase_definition phrase_catalog[] =
   {141, response_act_ask, field_vehicle, department_unknown, phrase_variant_initial_question, 0, 0, "What year, make, and model is the vehicle?"},
   {142, response_act_ask, field_vehicle, department_unknown, phrase_variant_initial_question, 0, 0, "Which vehicle is this for?"},
   {151, response_act_ask, field_request, department_unknown, phrase_variant_initial_question, 0, 0, "What should I note for the team?"},
+  {153, response_act_ask, field_request, department_parts, phrase_variant_initial_question, 0, 0, "Which specific part should the parts team check?"},
+  {154, response_act_ask, field_request, department_sales, phrase_variant_initial_question, 0, 0, "Any specific model or type of car?"},
   {152, response_act_ask, field_request, department_unknown, phrase_variant_initial_question, 0, 0, "What would you like the team to know?"},
-  {161, response_act_ask, field_callback_time, department_unknown, phrase_variant_initial_question, 0, 0, "What day and time between nine and five works for a callback?"},
-  {162, response_act_ask, field_callback_time, department_unknown, phrase_variant_initial_question, 0, 0, "When between nine and five should the team call?"},
+  {159, response_act_ask, field_callback_date, department_unknown, phrase_variant_initial_question, 0, 0, "What date or day works best for a callback?"},
+  {161, response_act_ask, field_callback_time, department_unknown, phrase_variant_initial_question, 0, 0, "What time between nine and five works that day?"},
+  {162, response_act_ask, field_callback_time, department_unknown, phrase_variant_initial_question, 0, 0, "When between nine and five should the team call that day?"},
   {171, response_act_ask, field_phone, department_unknown, phrase_variant_initial_question, 0, 0, "What is the best callback number?"},
   {172, response_act_ask, field_phone, department_unknown, phrase_variant_initial_question, 0, 0, "Which number should the team call?"},
 
@@ -33,8 +36,9 @@ static const Phrase_definition phrase_catalog[] =
   {241, response_act_ask, field_vehicle, department_unknown, phrase_variant_retry_question, 1, 1, "What make and model is it?"},
   {242, response_act_ask, field_vehicle, department_unknown, phrase_variant_retry_question, 2, 9, "Which vehicle should I write down?"},
   {251, response_act_ask, field_request, department_unknown, phrase_variant_retry_question, 1, 9, "What is the main thing the team should know?"},
-  {261, response_act_ask, field_callback_time, department_unknown, phrase_variant_retry_question, 1, 1, "Which day works best?"},
-  {262, response_act_ask, field_callback_time, department_unknown, phrase_variant_retry_question, 2, 9, "Would morning or afternoon work better?"},
+  {259, response_act_ask, field_callback_date, department_unknown, phrase_variant_retry_question, 1, 9, "What specific date or day should I write down?"},
+  {261, response_act_ask, field_callback_time, department_unknown, phrase_variant_retry_question, 1, 9, "What time between nine and five works on that date?"},
+  {262, response_act_ask, field_callback_time, department_unknown, phrase_variant_retry_question, 2, 9, "Would morning or afternoon work better on that date?"},
   {271, response_act_ask, field_phone, department_unknown, phrase_variant_retry_question, 1, 9, "What callback number should I write down?"},
 
   {301, response_act_ask, field_callback_time, department_unknown, phrase_variant_confirmation_question, 0, 9, "Is that the date and time you meant?"},
@@ -59,6 +63,7 @@ static const Phrase_definition phrase_catalog[] =
   {631, response_act_clarify, field_last_name_spelling, department_unknown, phrase_variant_any, 1, 9, "I need the letters in your last name."},
   {641, response_act_clarify, field_vehicle, department_unknown, phrase_variant_any, 1, 9, "I need enough detail to identify the vehicle."},
   {651, response_act_clarify, field_request, department_unknown, phrase_variant_any, 1, 9, "I just need a short description for the team."},
+  {660, response_act_clarify, field_callback_date, department_unknown, phrase_variant_any, 1, 9, "I need a specific date or day for the callback."},
   {661, response_act_clarify, field_callback_time, department_unknown, phrase_variant_any, 1, 1, "I need a specific day and a time between nine and five."},
   {662, response_act_clarify, field_callback_time, department_unknown, phrase_variant_any, 2, 9, "A day plus morning or afternoon is enough."},
   {671, response_act_clarify, field_phone, department_unknown, phrase_variant_any, 1, 9, "I need a callback number with at least seven digits."},
@@ -66,7 +71,7 @@ static const Phrase_definition phrase_catalog[] =
   {701, response_act_confirm_correction, field_none, department_unknown, phrase_variant_any, 0, 9, "Thanks, I've updated that."},
   {702, response_act_confirm_correction, field_none, department_unknown, phrase_variant_any, 0, 9, "Got it, I changed that."},
 
-  {801, response_act_readback, field_callback_time, department_unknown, phrase_variant_any, 0, 9, "I understood that as {callback_time}."},
+  {801, response_act_readback, field_callback_time, department_unknown, phrase_variant_any, 0, 9, "I understood that as {callback_date} {callback_time}."},
   {811, response_act_readback, field_phone_confirmed, department_unknown, phrase_variant_any, 0, 9, "I have {phone}."},
   {821, response_act_readback, field_final_confirmed, department_unknown, phrase_variant_any, 0, 9, "I have your request and callback details ready for the {department} team."},
 
@@ -193,6 +198,11 @@ static bool required_values_available(
   }
   if (text_contains(phrase->text, "{callback_time}") &&
       (state_field_value(state, field_callback_time)[0] == '\0'))
+  {
+    return false;
+  }
+  if (text_contains(phrase->text, "{callback_date}") &&
+      (state_field_value(state, field_callback_date)[0] == '\0'))
   {
     return false;
   }
@@ -506,6 +516,10 @@ static const char* placeholder_value(
   if (std::strcmp(placeholder, "{callback_time}") == 0)
   {
     return state_field_value(state, field_callback_time);
+  }
+  if (std::strcmp(placeholder, "{callback_date}") == 0)
+  {
+    return state_field_value(state, field_callback_date);
   }
   if (std::strcmp(placeholder, "{phone}") == 0)
   {

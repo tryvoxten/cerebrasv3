@@ -175,7 +175,9 @@ static void placeholders_require_grounded_values_and_render_exactly(void)
   add_act(&plan, cerebras_v3::response_act_ask);
   phrase = cerebras_v3::find_phrase_definition(801);
   expect_true(!cerebras_v3::phrase_eligible(phrase, &context), "callback readback requires captured callback value");
-  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "Friday afternoon", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "Friday", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_callback_date].status = cerebras_v3::status_captured;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "afternoon", cerebras_v3::max_text);
   state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
   expect_true(cerebras_v3::render_phrase(phrase, &context, output, 512), "grounded callback readback renders");
   expect_true(std::strcmp(output, "I understood that as Friday afternoon.") == 0, "callback placeholder frames value as an interpretation");

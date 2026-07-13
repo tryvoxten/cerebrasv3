@@ -6,6 +6,10 @@
 
 namespace cerebras_v3
 {
+static void capture(Field* field, const char* value, int confidence);
+static bool is_captured(const Field* field);
+static void clear_confirmation(Field* field);
+
 static void clear_text(char* text)
 {
   if (text != 0)
@@ -326,6 +330,92 @@ static bool valid_callback_time(const char* text)
     return false;
   }
   return has_callback_day_signal(lowered) && has_callback_window_signal(lowered);
+}
+
+static bool valid_callback_date(const char* text)
+{
+  char lowered[max_text];
+  if ((text == 0) || (text[0] == '\0'))
+  {
+    return false;
+  }
+  lowercase(lowered, text, max_text);
+  if (has_callback_blocked_signal(lowered))
+  {
+    return false;
+  }
+  return has_callback_day_signal(lowered);
+}
+
+static bool valid_callback_window(const char* text)
+{
+  char lowered[max_text];
+  if ((text == 0) || (text[0] == '\0'))
+  {
+    return false;
+  }
+  lowercase(lowered, text, max_text);
+  if (has_callback_blocked_signal(lowered))
+  {
+    return false;
+  }
+  return has_callback_window_signal(lowered);
+}
+
+static void clear_callback_fields(State* state)
+{
+  if (state == 0)
+  {
+    return;
+  }
+  clear_text(state->fields[field_callback_date].value);
+  state->fields[field_callback_date].status = status_missing;
+  state->fields[field_callback_date].confirmed = false;
+  clear_text(state->fields[field_callback_time].value);
+  state->fields[field_callback_time].status = status_missing;
+  state->fields[field_callback_time].confirmed = false;
+}
+
+static bool capture_callback_parts(
+  State* state,
+  const char* date_text,
+  const char* time_text,
+  const char* combined_text,
+  int confidence)
+{
+  bool changed = false;
+  if (state == 0)
+  {
+    return false;
+  }
+  if (!is_captured(&state->fields[field_callback_date]) && valid_callback_date(date_text))
+  {
+    capture(&state->fields[field_callback_date], date_text, confidence);
+    changed = true;
+  }
+  if (!is_captured(&state->fields[field_callback_time]) && valid_callback_window(time_text))
+  {
+    capture(&state->fields[field_callback_time], time_text, confidence);
+    changed = true;
+  }
+  if (valid_callback_time(combined_text))
+  {
+    if (!is_captured(&state->fields[field_callback_date]))
+    {
+      capture(&state->fields[field_callback_date], combined_text, confidence);
+      changed = true;
+    }
+    if (!is_captured(&state->fields[field_callback_time]))
+    {
+      capture(&state->fields[field_callback_time], combined_text, confidence);
+      changed = true;
+    }
+  }
+  if (changed)
+  {
+    clear_confirmation(&state->fields[field_final_confirmed]);
+  }
+  return changed;
 }
 
 static bool has_year(const char* text)
@@ -911,6 +1001,7 @@ void clear_interpretation(Interpretation* interpretation)
     clear_text(interpretation->intent);
     clear_text(interpretation->vehicle);
     clear_text(interpretation->request);
+    clear_text(interpretation->callback_date);
     clear_text(interpretation->callback_time);
     clear_text(interpretation->phone);
     clear_text(interpretation->name);
@@ -992,9 +1083,7 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
       !state->fields[field_callback_time].confirmed &&
       affirmation_is_no(interpretation, caller_text))
   {
-    clear_text(state->fields[field_callback_time].value);
-    state->fields[field_callback_time].status = status_missing;
-    state->fields[field_callback_time].confirmed = false;
+    clear_callback_fields(state);
     return;
   }
   if ((state->last_requested == field_callback_time) &&
@@ -1050,11 +1139,15 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
       capture(&state->fields[field_request], interpretation->request, 92);
       return;
     }
-    if (answered_field_is(interpretation, "callback_time") && valid_callback_time(interpretation->callback_time))
+    if ((answered_field_is(interpretation, "callback_date") ||
+         answered_field_is(interpretation, "callback_time")) &&
+        (interpretation->callback_date[0] != '\0' || interpretation->callback_time[0] != '\0'))
     {
-      capture(&state->fields[field_callback_time], interpretation->callback_time, 92);
-      clear_confirmation(&state->fields[field_final_confirmed]);
-      return;
+      clear_callback_fields(state);
+      if (capture_callback_parts(state, interpretation->callback_date, interpretation->callback_time, interpretation->callback_time, 92))
+      {
+        return;
+      }
     }
     if (answered_field_is(interpretation, "phone") && (interpretation->phone[0] != '\0'))
     {
@@ -1099,17 +1192,19 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
   {
     capture(&state->fields[field_request], interpretation->request, 88);
   }
-  if (!is_captured(&state->fields[field_callback_time]))
+  if (!is_captured(&state->fields[field_callback_date]) ||
+      !is_captured(&state->fields[field_callback_time]))
   {
-    if (valid_callback_time(interpretation->callback_time))
+    capture_callback_parts(
+      state,
+      interpretation->callback_date,
+      interpretation->callback_time,
+      interpretation->callback_time,
+      88);
+    if ((state->last_requested == field_callback_date) ||
+        (state->last_requested == field_callback_time))
     {
-      capture(&state->fields[field_callback_time], interpretation->callback_time, 88);
-      clear_confirmation(&state->fields[field_final_confirmed]);
-    }
-    else if ((state->last_requested == field_callback_time) && valid_callback_time(caller_text))
-    {
-      capture(&state->fields[field_callback_time], caller_text, 82);
-      clear_confirmation(&state->fields[field_final_confirmed]);
+      capture_callback_parts(state, caller_text, caller_text, caller_text, 82);
     }
   }
   if (!is_captured(&state->fields[field_phone]))
@@ -1173,7 +1268,8 @@ static Conversation_phase conversation_phase_for_state(const State* state)
   {
     return conversation_phase_complete;
   }
-  if (is_captured(&state->fields[field_callback_time]) ||
+  if (is_captured(&state->fields[field_callback_date]) ||
+      is_captured(&state->fields[field_callback_time]) ||
       is_captured(&state->fields[field_phone]))
   {
     return conversation_phase_confirmation;
@@ -1279,11 +1375,17 @@ Plan plan_next(const State* state)
     plan.response_task = "Ask for one short description of the request or issue.";
     plan.fallback_sentence = "What should I note for the team?";
   }
+  else if (!is_captured(&state->fields[field_callback_date]))
+  {
+    plan.next_field = field_callback_date;
+    plan.response_task = "Ask what date or day works best for a callback.";
+    plan.fallback_sentence = "What date or day works best for a callback?";
+  }
   else if (!is_captured(&state->fields[field_callback_time]))
   {
     plan.next_field = field_callback_time;
-    plan.response_task = "Ask what day and time between 9 AM and 5 PM works best for a callback.";
-    plan.fallback_sentence = "What day and time between 9 AM and 5 PM works best for a callback?";
+    plan.response_task = "Ask what time between 9 AM and 5 PM works best on the callback date.";
+    plan.fallback_sentence = "What time between 9 AM and 5 PM works best that day?";
   }
   else if (!state->fields[field_callback_time].confirmed)
   {
@@ -1327,6 +1429,7 @@ const char* field_label(Field_id field)
     case field_last_name_spelling: result = "last_name_spelling"; break;
     case field_vehicle: result = "vehicle"; break;
     case field_request: result = "request"; break;
+    case field_callback_date: result = "callback_date"; break;
     case field_callback_time: result = "callback_time"; break;
     case field_phone: result = "phone"; break;
     case field_phone_confirmed: result = "phone_confirmed"; break;
@@ -1403,6 +1506,7 @@ static Field_id field_from_text(const char* text)
     else if (contains_text(text, "last_name_spelling") || contains_text(text, "spelling")) { field = field_last_name_spelling; }
     else if (contains_text(text, "vehicle")) { field = field_vehicle; }
     else if (contains_text(text, "request")) { field = field_request; }
+    else if (contains_text(text, "callback_date")) { field = field_callback_date; }
     else if (contains_text(text, "callback_time")) { field = field_callback_time; }
     else if (contains_text(text, "phone_confirmed")) { field = field_phone_confirmed; }
     else if (contains_text(text, "final_confirmed")) { field = field_final_confirmed; }
@@ -1526,7 +1630,12 @@ bool parse_interpretation_json(const char* json, Interpretation* interpretation)
   has_request = json_value(json, "\"r\"", interpretation->request, max_text);
   found = has_department || has_intent || has_request;
   found = json_value(json, "\"v\"", interpretation->vehicle, max_text) || found;
-  found = json_value(json, "\"cb\"", interpretation->callback_time, max_text) || found;
+  found = json_value(json, "\"cd\"", interpretation->callback_date, max_text) || found;
+  found = json_value(json, "\"ct\"", interpretation->callback_time, max_text) || found;
+  if (interpretation->callback_time[0] == '\0')
+  {
+    found = json_value(json, "\"cb\"", interpretation->callback_time, max_text) || found;
+  }
   found = json_value(json, "\"p\"", interpretation->phone, max_text) || found;
   found = json_value(json, "\"n\"", interpretation->name, max_text) || found;
   found = json_value(json, "\"s\"", interpretation->spelling, max_text) || found;
@@ -1724,6 +1833,8 @@ void state_to_json(const State* state, char* output, int capacity)
   append_json_string(output, capacity, (state != 0) ? state->fields[field_vehicle].value : "");
   append(output, capacity, ",\"request\":");
   append_json_string(output, capacity, (state != 0) ? state->fields[field_request].value : "");
+  append(output, capacity, ",\"callback_date\":");
+  append_json_string(output, capacity, (state != 0) ? state->fields[field_callback_date].value : "");
   append(output, capacity, ",\"callback_time\":");
   append_json_string(output, capacity, (state != 0) ? state->fields[field_callback_time].value : "");
   append(output, capacity, ",\"callback_time_confirmed\":");
@@ -1796,6 +1907,7 @@ void load_state_from_json(State* state, const char* json)
   if (json_value(json, "\"spelling\"", value, max_text)) { capture(&state->fields[field_last_name_spelling], value, 90); }
   if (json_value(json, "\"vehicle\"", value, max_text)) { capture(&state->fields[field_vehicle], value, 90); }
   if (json_value(json, "\"request\"", value, max_text)) { capture(&state->fields[field_request], value, 90); }
+  if (json_value(json, "\"callback_date\"", value, max_text)) { capture(&state->fields[field_callback_date], value, 90); }
   if (json_value(json, "\"callback_time\"", value, max_text)) { capture(&state->fields[field_callback_time], value, 90); }
   if (json_bool(json, "\"callback_time_confirmed\""))
   {

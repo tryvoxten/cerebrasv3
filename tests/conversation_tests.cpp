@@ -112,11 +112,13 @@ static void cq04_vague_callback_retry(void)
   cerebras_v3::Plan plan;
   cerebras_v3::Response_context context;
   cerebras_v3::Response_render_result result;
-  prepare(&state, &interpretation, &plan, &context, cerebras_v3::field_callback_time);
-  state.history.retry_counts[cerebras_v3::field_callback_time] = 1;
+  prepare(&state, &interpretation, &plan, &context, cerebras_v3::field_callback_date);
+  state.history.retry_counts[cerebras_v3::field_callback_date] = 1;
   expect_true(render(&state, &context, "", &result), "CQ-04 renders");
   expect_true(result.plan.structure == cerebras_v3::response_structure_clarify_ask, "CQ-04 uses retry structure");
-  expect_true(std::strstr(result.text, "Which day") != 0, "CQ-04 narrows vague callback to day");
+  expect_true(
+    (std::strstr(result.text, "date") != 0) || (std::strstr(result.text, "day") != 0),
+    "CQ-04 narrows vague callback to date or day");
 }
 
 static void cq05_customer_confusion(void)
@@ -228,7 +230,8 @@ static void cq10_callback_correction(void)
   prepare(&state, &interpretation, &plan, &context, cerebras_v3::field_callback_time);
   cerebras_v3::copy_text(interpretation.turn_type, "correction", 64);
   cerebras_v3::copy_text(interpretation.answered_field, "callback_time", 64);
-  capture(&state, cerebras_v3::field_callback_time, "Friday afternoon");
+  capture(&state, cerebras_v3::field_callback_date, "Friday");
+  capture(&state, cerebras_v3::field_callback_time, "afternoon");
   expect_true(render(&state, &context, "", &result), "CQ-10 renders");
   expect_true(result.plan.structure == cerebras_v3::response_structure_confirm_correction_readback_ask, "CQ-10 uses correction readback structure");
   expect_true(std::strstr(result.text, "Friday afternoon") != 0, "CQ-10 reads corrected callback exactly");
