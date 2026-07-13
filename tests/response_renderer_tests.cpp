@@ -73,9 +73,8 @@ static void readback_response_contains_exact_value(void)
   expect_true(cerebras_v3::render_structured_response(&state, &context, &options, &result), "callback readback response renders");
   expect_true(std::strstr(result.text, "Friday afternoon") != 0, "callback readback uses exact state value");
   expect_true(
-    (std::strstr(result.text, "you meant") != 0) ||
-    (std::strstr(result.text, "understand") != 0),
-    "callback readback explicitly confirms interpretation");
+    std::strstr(result.text, "right") != 0,
+    "callback readback uses short natural confirmation");
   expect_true(result.plan.structure == cerebras_v3::response_structure_readback_ask, "callback uses readback structure");
 }
 

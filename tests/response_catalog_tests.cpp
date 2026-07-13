@@ -156,11 +156,11 @@ static void question_mode_selects_retry_and_confirmation_collections(void)
   expect_true(count == 2, "callback readback has confirmation questions");
   expect_true(phrases[0]->variant == cerebras_v3::phrase_variant_confirmation_question, "readback cannot select initial question");
   expect_true(
-    std::strstr(cerebras_v3::find_phrase_definition(301)->text, "you meant") != 0,
-    "callback confirmation checks the caller's intended date and time");
+    std::strstr(cerebras_v3::find_phrase_definition(301)->text, "right") != 0,
+    "callback confirmation uses short natural wording");
   expect_true(
-    std::strstr(cerebras_v3::find_phrase_definition(302)->text, "understand") != 0,
-    "callback confirmation checks the assistant's interpretation");
+    std::strstr(cerebras_v3::find_phrase_definition(302)->text, "right") != 0,
+    "callback confirmation checks the assistant's interpretation naturally");
 }
 
 static void placeholders_require_grounded_values_and_render_exactly(void)
@@ -180,7 +180,7 @@ static void placeholders_require_grounded_values_and_render_exactly(void)
   cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "afternoon", cerebras_v3::max_text);
   state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
   expect_true(cerebras_v3::render_phrase(phrase, &context, output, 512), "grounded callback readback renders");
-  expect_true(std::strcmp(output, "I understood that as Friday afternoon.") == 0, "callback placeholder frames value as an interpretation");
+  expect_true(std::strcmp(output, "Okay, Friday afternoon.") == 0, "callback placeholder frames value naturally");
 
   phrase = cerebras_v3::find_phrase_definition(901);
   expect_true(!cerebras_v3::phrase_eligible(phrase, &context), "knowledge answer requires approved answer text");

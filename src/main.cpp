@@ -1928,9 +1928,9 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
           (state->fields[cerebras_v3::field_callback_time].value[0] != '\0') &&
           !state->fields[cerebras_v3::field_callback_time].confirmed)
       {
-        append_text(output, capacity, "I understood that as ");
+        append_text(output, capacity, "Okay, ");
         append_callback_datetime_clean(state, output, capacity);
-        append_text(output, capacity, ". Is that the date and time you meant?");
+        append_text(output, capacity, ". Is that right?");
       }
       else
       {
@@ -1952,7 +1952,7 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
       append_final_confirmation(state, output, capacity);
       return true;
     case cerebras_v3::field_none:
-      cerebras_v3::copy_text(output, "Thanks, the team will follow up.", capacity);
+      cerebras_v3::copy_text(output, "Perfect, I'll pass this to the team so they can call you back.", capacity);
       return true;
     default:
       break;
