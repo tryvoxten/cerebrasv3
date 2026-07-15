@@ -248,7 +248,8 @@ static void phone_confirmation_advances(void)
   cerebras_v3::clear_interpretation(&interpretation);
   cerebras_v3::merge_interpretation(&state, &interpretation, "yes that is correct");
   plan = cerebras_v3::plan_next(&state);
-  expect_true(plan.next_field == cerebras_v3::field_final_confirmed, "phone confirmation advances to final");
+  expect_true(state.fields[cerebras_v3::field_final_confirmed].confirmed, "phone confirmation marks final ready");
+  expect_true(plan.complete, "phone confirmation completes intake");
 }
 
 static void ai_affirmation_advances_phone_confirmation(void)
@@ -274,7 +275,8 @@ static void ai_affirmation_advances_phone_confirmation(void)
   cerebras_v3::copy_text(interpretation.affirmation, "yes", 32);
   cerebras_v3::merge_interpretation(&state, &interpretation, "that works");
   plan = cerebras_v3::plan_next(&state);
-  expect_true(plan.next_field == cerebras_v3::field_final_confirmed, "ai yes advances phone confirmation");
+  expect_true(state.fields[cerebras_v3::field_final_confirmed].confirmed, "ai yes marks final ready");
+  expect_true(plan.complete, "ai yes completes phone confirmation");
 }
 
 static void ai_rejection_reasks_phone(void)
@@ -325,7 +327,8 @@ static void kb_confirmation_phrases_advance(void)
   cerebras_v3::clear_interpretation(&interpretation);
   cerebras_v3::merge_interpretation(&state, &interpretation, "right");
   plan = cerebras_v3::plan_next(&state);
-  expect_true(plan.next_field == cerebras_v3::field_final_confirmed, "right advances phone confirmation");
+  expect_true(state.fields[cerebras_v3::field_final_confirmed].confirmed, "right marks final ready");
+  expect_true(plan.complete, "right completes phone confirmation");
 
   cerebras_v3::init_state(&state);
   cerebras_v3::clear_interpretation(&interpretation);
@@ -344,7 +347,8 @@ static void kb_confirmation_phrases_advance(void)
   cerebras_v3::clear_interpretation(&interpretation);
   cerebras_v3::merge_interpretation(&state, &interpretation, "yep that is mine");
   plan = cerebras_v3::plan_next(&state);
-  expect_true(plan.next_field == cerebras_v3::field_final_confirmed, "yep that is mine advances phone confirmation");
+  expect_true(state.fields[cerebras_v3::field_final_confirmed].confirmed, "yep that is mine marks final ready");
+  expect_true(plan.complete, "yep that is mine completes phone confirmation");
 }
 
 static void confirmation_state_roundtrips(void)
@@ -830,6 +834,48 @@ static void correction_overwrites_callback_time(void)
   expect_true(plan.next_field == cerebras_v3::field_callback_time, "callback correction re-confirms callback time");
 }
 
+static void correction_can_also_capture_callback_time(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_service;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Sam Patel", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "P A T E L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_vehicle].value, "2012 Acura TLX", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_request].value, "weird noise", cerebras_v3::max_text);
+  mark_callback_prerequisites(&state);
+  state.last_requested = cerebras_v3::field_callback_time;
+
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "correction", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "vehicle", 64);
+  cerebras_v3::copy_text(interpretation.vehicle, "2012 Acura MDX", cerebras_v3::max_text);
+  cerebras_v3::copy_text(interpretation.callback_time, "July 8, 2026 at 3:00 PM", cerebras_v3::max_text);
+
+  cerebras_v3::merge_interpretation(
+    &state,
+    &interpretation,
+    "tomorrow at three, but actually it is an MDX");
+  plan = cerebras_v3::plan_next(&state);
+
+  expect_true(
+    std::strcmp(state.fields[cerebras_v3::field_vehicle].value, "2012 Acura MDX") == 0,
+    "mixed correction updates vehicle");
+  expect_true(
+    state.fields[cerebras_v3::field_callback_time].status == cerebras_v3::status_captured,
+    "mixed correction captures callback time too");
+  expect_true(
+    std::strcmp(state.fields[cerebras_v3::field_callback_time].value, "July 8, 2026 at 3:00 PM") == 0,
+    "mixed correction stores callback value");
+  expect_true(
+    plan.next_field == cerebras_v3::field_callback_time,
+    "mixed correction asks callback confirmation");
+}
+
 static void correction_overwrites_spelling(void)
 {
   cerebras_v3::State state;
@@ -1141,6 +1187,7 @@ int main(void)
   correction_switches_department();
   correction_overwrites_request();
   correction_overwrites_callback_time();
+  correction_can_also_capture_callback_time();
   correction_overwrites_spelling();
   correction_overwrites_name();
   precursor_name_is_captured();

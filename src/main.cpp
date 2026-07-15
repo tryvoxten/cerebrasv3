@@ -1997,6 +1997,51 @@ static bool message_matches_faq_alias(const char* lowered_message, const char* f
   return false;
 }
 
+static bool message_has_parts_availability_context(const char* lowered_message)
+{
+  if (lowered_message == 0)
+  {
+    return false;
+  }
+  return
+    contains_text(lowered_message, "part") ||
+    contains_text(lowered_message, "parts") ||
+    contains_text(lowered_message, "accessory") ||
+    contains_text(lowered_message, "key fob") ||
+    contains_text(lowered_message, "cargo mat") ||
+    contains_text(lowered_message, "wiper blade") ||
+    contains_text(lowered_message, "brake pad") ||
+    contains_text(lowered_message, "filter") ||
+    contains_text(lowered_message, "sensor") ||
+    contains_text(lowered_message, "rim") ||
+    contains_text(lowered_message, "tire");
+}
+
+static bool message_asks_about_hours(const char* lowered_message)
+{
+  if (lowered_message == 0)
+  {
+    return false;
+  }
+  return
+    message_matches_faq_alias(lowered_message, "service_hours") ||
+    contains_text(lowered_message, "what time do you close") ||
+    contains_text(lowered_message, "what time do you open") ||
+    contains_text(lowered_message, "when do you close") ||
+    contains_text(lowered_message, "when do you open") ||
+    contains_text(lowered_message, "how late are you open") ||
+    contains_text(lowered_message, "hours");
+}
+
+static bool faq_alias_allowed_for_message(const char* lowered_message, const char* faq_id)
+{
+  if ((faq_id != 0) && (std::strcmp(faq_id, "parts_availability") == 0))
+  {
+    return message_has_parts_availability_context(lowered_message);
+  }
+  return true;
+}
+
 static bool best_matching_faq_id(const char* lowered_message, char* output, int capacity)
 {
   int index = 0;
@@ -2009,11 +2054,14 @@ static bool best_matching_faq_id(const char* lowered_message, char* output, int 
   while (index < cerebras_v3::generated_kb::faq_alias_count)
   {
     const char* phrase = cerebras_v3::generated_kb::faq_aliases[index].phrase;
+    const char* faq_id = cerebras_v3::generated_kb::faq_aliases[index].faq_id;
     const int phrase_length = static_cast<int>(std::strlen(phrase));
-    if ((phrase_length > best_length) && contains_text(lowered_message, phrase))
+    if ((phrase_length > best_length) &&
+        faq_alias_allowed_for_message(lowered_message, faq_id) &&
+        contains_text(lowered_message, phrase))
     {
       best_length = phrase_length;
-      cerebras_v3::copy_text(output, cerebras_v3::generated_kb::faq_aliases[index].faq_id, capacity);
+      cerebras_v3::copy_text(output, faq_id, capacity);
     }
     index += 1;
   }
@@ -2050,6 +2098,18 @@ static void correct_faq_id_from_message(const char* message, cerebras_v3::Interp
   {
     cerebras_v3::copy_text(interpretation->faq_id, "parts_order_status", 64);
   }
+  else if (message_matches_faq_alias(lowered, "service-loaner-vehicle"))
+  {
+    cerebras_v3::copy_text(interpretation->faq_id, "service-loaner-vehicle", 64);
+  }
+  else if (message_matches_faq_alias(lowered, "service-shuttle-service"))
+  {
+    cerebras_v3::copy_text(interpretation->faq_id, "service-shuttle-service", 64);
+  }
+  else if (message_asks_about_hours(lowered))
+  {
+    cerebras_v3::copy_text(interpretation->faq_id, "service_hours", 64);
+  }
   else if (message_matches_faq_alias(lowered, "sales_inventory") &&
            (contains_text(lowered, "electric hyundai") ||
             contains_text(lowered, "electric hyundais") ||
@@ -2069,13 +2129,11 @@ static void correct_faq_id_from_message(const char* message, cerebras_v3::Interp
   {
     cerebras_v3::copy_text(interpretation->faq_id, "sales_inventory", 64);
   }
-  else if (message_matches_faq_alias(lowered, "parts_availability"))
+  else if (message_has_parts_availability_context(lowered) &&
+           (message_matches_faq_alias(lowered, "parts_availability") ||
+            contains_text(lowered, "availability")))
   {
     cerebras_v3::copy_text(interpretation->faq_id, "parts_availability", 64);
-  }
-  else if (message_matches_faq_alias(lowered, "service_hours"))
-  {
-    cerebras_v3::copy_text(interpretation->faq_id, "service_hours", 64);
   }
   else if (best_matching_faq_id(lowered, best_faq_id, 64))
   {

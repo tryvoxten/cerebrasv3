@@ -1107,6 +1107,8 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
   {
     state->fields[field_phone_confirmed].status = status_captured;
     state->fields[field_phone_confirmed].confirmed = true;
+    state->fields[field_final_confirmed].status = status_captured;
+    state->fields[field_final_confirmed].confirmed = true;
     return;
   }
   if ((state->last_requested == field_final_confirmed) && affirmation_is_yes(interpretation, caller_text))
@@ -1126,27 +1128,29 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
     {
       state->department = department;
       capture(&state->fields[field_department], department_name(department), 100);
-      return;
+      clear_confirmation(&state->fields[field_final_confirmed]);
     }
     if (answered_field_is(interpretation, "vehicle") && is_whitelisted_vehicle(interpretation->vehicle))
     {
       canonical_vehicle_text(canonical_vehicle, interpretation->vehicle, max_text);
       capture(&state->fields[field_vehicle], canonical_vehicle, 92);
-      return;
+      clear_confirmation(&state->fields[field_final_confirmed]);
     }
     if (answered_field_is(interpretation, "request") && (interpretation->request[0] != '\0'))
     {
       capture(&state->fields[field_request], interpretation->request, 92);
-      return;
+      clear_confirmation(&state->fields[field_final_confirmed]);
     }
     if ((answered_field_is(interpretation, "callback_date") ||
-         answered_field_is(interpretation, "callback_time")) &&
+         answered_field_is(interpretation, "callback_time") ||
+         (state->last_requested == field_callback_date) ||
+         (state->last_requested == field_callback_time)) &&
         (interpretation->callback_date[0] != '\0' || interpretation->callback_time[0] != '\0'))
     {
       clear_callback_fields(state);
       if (capture_callback_parts(state, interpretation->callback_date, interpretation->callback_time, interpretation->callback_time, 92))
       {
-        return;
+        clear_confirmation(&state->fields[field_final_confirmed]);
       }
     }
     if (answered_field_is(interpretation, "phone") && (interpretation->phone[0] != '\0'))
@@ -1154,19 +1158,17 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
       capture(&state->fields[field_phone], interpretation->phone, 94);
       clear_confirmation(&state->fields[field_phone_confirmed]);
       clear_confirmation(&state->fields[field_final_confirmed]);
-      return;
     }
     if (answered_field_is(interpretation, "name") && should_capture_name(state, interpretation, caller_text))
     {
       capture(&state->fields[field_caller_name], interpretation->name, 92);
       clear_confirmation(&state->fields[field_last_name_spelling]);
       clear_confirmation(&state->fields[field_final_confirmed]);
-      return;
     }
     if (answered_field_is(interpretation, "last_name_spelling") && (interpretation->spelling[0] != '\0'))
     {
       capture(&state->fields[field_last_name_spelling], interpretation->spelling, 92);
-      return;
+      clear_confirmation(&state->fields[field_final_confirmed]);
     }
     return;
   }

@@ -532,6 +532,46 @@ static void completed_intake_ends_retell_call(void)
     "completed intake sends Retell end_call true");
 }
 
+static void phone_confirmation_closes_without_final_reconfirmation(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_service;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "S M I T H", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_vehicle].value, "2012 Acura MDX", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_request].value, "weird noise", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "July 8, 2026", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "3:00 PM", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_phone].value, "6472121234", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_vehicle].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_request].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_date].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_phone].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].confirmed = true;
+  state.last_requested = cerebras_v3::field_phone_confirmed;
+
+  process_chat_turn(&state, &config, "Yep.", "I have 6472121234. Is that the correct callback number?", "", &result);
+
+  expect_true(result.end_call, "phone confirmation ends intake without final confirmation");
+  expect_true(std::strchr(result.response_text, '?') == 0, "phone confirmation close asks no extra question");
+  expect_true(
+    std::strstr(result.response_text, "service team") != 0,
+    "phone confirmation close names handoff team");
+}
+
 static void completed_intake_reads_back_details_when_asked(void)
 {
   Config config;
@@ -631,6 +671,43 @@ static void calling_number_question_uses_metadata_or_requests_dictation(void)
     "missing metadata keeps the phone collection step active");
 }
 
+static void expect_corrected_faq(const char* message, const char* expected, const char* label)
+{
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.faq_question, message, cerebras_v3::max_text);
+  correct_faq_id_from_message(message, &interpretation);
+  expect_text(interpretation.faq_id, expected, label);
+}
+
+static void faq_priority_handles_multi_question_turns(void)
+{
+  expect_corrected_faq(
+    "Do you have loaners and what time does service close?",
+    "service-loaner-vehicle",
+    "loaner beats broad do-you-have parts alias");
+  expect_corrected_faq(
+    "What time do you close and do you have loaners?",
+    "service-loaner-vehicle",
+    "loaner still wins when hours comes first");
+  expect_corrected_faq(
+    "Do you have loaner vehicles and shuttle service?",
+    "service-loaner-vehicle",
+    "loaner and shuttle multi-question does not become parts");
+  expect_corrected_faq(
+    "Can you check part availability and what time do you close?",
+    "service_hours",
+    "hours beats generic parts availability in mixed FAQ");
+  expect_corrected_faq(
+    "Do you have brake pads in stock?",
+    "parts_availability",
+    "real part availability still routes to parts");
+  expect_corrected_faq(
+    "Do you have Ioniq inventory and financing options?",
+    "financing",
+    "financing priority still beats inventory");
+}
+
 int main(void)
 {
   websocket_path_skips_full_length_secret();
@@ -643,9 +720,11 @@ int main(void)
   structured_opening_uses_after_hours_identity();
   structured_response_composes_without_ai();
   completed_intake_ends_retell_call();
+  phone_confirmation_closes_without_final_reconfirmation();
   completed_intake_reads_back_details_when_asked();
   retell_call_details_select_customer_number();
   calling_number_question_uses_metadata_or_requests_dictation();
+  faq_priority_handles_multi_question_turns();
   if (failures == 0)
   {
     std::printf("main_tests: PASS\n");
