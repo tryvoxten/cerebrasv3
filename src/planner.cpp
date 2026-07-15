@@ -362,6 +362,31 @@ static bool valid_callback_window(const char* text)
   return has_callback_window_signal(lowered);
 }
 
+static int phone_digit_count(const char* text)
+{
+  int index = 0;
+  int count = 0;
+  if (text == 0)
+  {
+    return 0;
+  }
+  while (text[index] != '\0')
+  {
+    if (std::isdigit(static_cast<unsigned char>(text[index])) != 0)
+    {
+      count += 1;
+    }
+    index += 1;
+  }
+  return count;
+}
+
+static bool valid_callback_phone(const char* text)
+{
+  const int digits = phone_digit_count(text);
+  return (digits == 10) || (digits == 11);
+}
+
 static void clear_callback_fields(State* state)
 {
   if (state == 0)
@@ -1105,10 +1130,21 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
   }
   if ((state->last_requested == field_phone_confirmed) && affirmation_is_yes(interpretation, caller_text))
   {
-    state->fields[field_phone_confirmed].status = status_captured;
-    state->fields[field_phone_confirmed].confirmed = true;
-    state->fields[field_final_confirmed].status = status_captured;
-    state->fields[field_final_confirmed].confirmed = true;
+    if (valid_callback_phone(state->fields[field_phone].value))
+    {
+      state->fields[field_phone_confirmed].status = status_captured;
+      state->fields[field_phone_confirmed].confirmed = true;
+      state->fields[field_final_confirmed].status = status_captured;
+      state->fields[field_final_confirmed].confirmed = true;
+    }
+    else
+    {
+      clear_text(state->fields[field_phone].value);
+      state->fields[field_phone].status = status_missing;
+      state->fields[field_phone].confirmed = false;
+      state->fields[field_phone_confirmed].status = status_missing;
+      state->fields[field_phone_confirmed].confirmed = false;
+    }
     return;
   }
   if ((state->last_requested == field_final_confirmed) && affirmation_is_yes(interpretation, caller_text))
@@ -1153,7 +1189,7 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
         clear_confirmation(&state->fields[field_final_confirmed]);
       }
     }
-    if (answered_field_is(interpretation, "phone") && (interpretation->phone[0] != '\0'))
+    if (answered_field_is(interpretation, "phone") && valid_callback_phone(interpretation->phone))
     {
       capture(&state->fields[field_phone], interpretation->phone, 94);
       clear_confirmation(&state->fields[field_phone_confirmed]);
@@ -1209,7 +1245,7 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
       capture_callback_parts(state, caller_text, caller_text, caller_text, 82);
     }
   }
-  if (!is_captured(&state->fields[field_phone]))
+  if (!is_captured(&state->fields[field_phone]) && valid_callback_phone(interpretation->phone))
   {
     capture(&state->fields[field_phone], interpretation->phone, 92);
   }
@@ -1916,7 +1952,7 @@ void load_state_from_json(State* state, const char* json)
     state->fields[field_callback_time].status = status_captured;
     state->fields[field_callback_time].confirmed = true;
   }
-  if (json_value(json, "\"phone\"", value, max_text)) { capture(&state->fields[field_phone], value, 90); }
+  if (json_value(json, "\"phone\"", value, max_text) && valid_callback_phone(value)) { capture(&state->fields[field_phone], value, 90); }
   if (json_bool(json, "\"phone_confirmed\""))
   {
     state->fields[field_phone_confirmed].status = status_captured;

@@ -66,7 +66,7 @@ static const Phrase_definition phrase_catalog[] =
   {660, response_act_clarify, field_callback_date, department_unknown, phrase_variant_any, 1, 9, "I need a specific date or day for the callback."},
   {661, response_act_clarify, field_callback_time, department_unknown, phrase_variant_any, 1, 1, "I need a specific day and a time between nine and five."},
   {662, response_act_clarify, field_callback_time, department_unknown, phrase_variant_any, 2, 9, "A day plus morning or afternoon is enough."},
-  {671, response_act_clarify, field_phone, department_unknown, phrase_variant_any, 1, 9, "I need a callback number with at least seven digits."},
+  {671, response_act_clarify, field_phone, department_unknown, phrase_variant_any, 1, 9, "I need the full ten-digit callback number."},
 
   {701, response_act_confirm_correction, field_none, department_unknown, phrase_variant_any, 0, 9, "Thanks, I've updated that."},
   {702, response_act_confirm_correction, field_none, department_unknown, phrase_variant_any, 0, 9, "Got it, I changed that."},

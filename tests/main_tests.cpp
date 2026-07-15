@@ -572,6 +572,175 @@ static void phone_confirmation_closes_without_final_reconfirmation(void)
     "phone confirmation close names handoff team");
 }
 
+static void incomplete_phone_is_reasked_and_not_closed(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_sales;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "sales", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "inventory", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Peter Russell", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "R U S S E L L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_request].value, "available inventory on the lot", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "Wednesday, July 22, 2026 at 4 PM", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "Wednesday, July 22, 2026 at 4 PM", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_request].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_date].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].confirmed = true;
+  state.last_requested = cerebras_v3::field_phone;
+
+  process_chat_turn(
+    &state,
+    &config,
+    "Six four seven two nine two four three eight.",
+    "Please say the full ten-digit callback number.",
+    "",
+    &result);
+
+  expect_true(!result.end_call, "nine-digit phone does not close call");
+  expect_true(
+    state.fields[cerebras_v3::field_phone].status == cerebras_v3::status_missing,
+    "nine-digit phone is not captured");
+  expect_true(
+    std::strstr(result.response_text, "ten-digit") != 0,
+    "nine-digit phone asks for full ten-digit number");
+}
+
+static void rejected_phone_confirmation_forces_full_number_retry(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_sales;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "sales", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "inventory", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Peter Russell", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "R U S S E L L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_request].value, "available inventory on the lot", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "Wednesday, July 22, 2026 at 4 PM", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "Wednesday, July 22, 2026 at 4 PM", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_phone].value, "6472924388", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_request].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_date].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_phone].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].confirmed = true;
+  state.last_requested = cerebras_v3::field_phone_confirmed;
+
+  process_chat_turn(
+    &state,
+    &config,
+    "No.",
+    "I have 6472924388. Is that the correct callback number?",
+    "",
+    &result);
+
+  expect_true(!result.end_call, "rejected phone confirmation does not close call");
+  expect_true(
+    state.fields[cerebras_v3::field_phone].status == cerebras_v3::status_missing,
+    "rejected phone clears callback number");
+  expect_true(
+    std::strstr(result.response_text, "repeat the full ten-digit") != 0,
+    "rejected phone asks for full repeat");
+}
+
+static void phone_what_did_you_get_reasks_full_number(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_sales;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "sales", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "inventory", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Peter Russell", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "R U S S E L L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_request].value, "available inventory on the lot", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "Wednesday, July 22, 2026 at 4 PM", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "Wednesday, July 22, 2026 at 4 PM", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_request].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_date].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].confirmed = true;
+  state.last_requested = cerebras_v3::field_phone;
+
+  process_chat_turn(
+    &state,
+    &config,
+    "It's two nine two what did you got?",
+    "Please say the full ten-digit callback number.",
+    "",
+    &result);
+
+  expect_true(!result.end_call, "what-did-you-get phone question does not close call");
+  expect_true(
+    std::strstr(result.response_text, "repeat the full ten-digit") != 0,
+    "what-did-you-get phone question asks for repeat");
+}
+
+static void relative_callback_readback_does_not_duplicate_dates(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_sales;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "sales", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "inventory", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Peter Russell", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "R U S S E L L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_request].value, "available inventory on the lot", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_request].status = cerebras_v3::status_captured;
+  state.last_requested = cerebras_v3::field_callback_date;
+
+  process_chat_turn(
+    &state,
+    &config,
+    "It's gonna be Wednesday after four PM.",
+    "What date or day works best for a callback?",
+    "",
+    &result);
+
+  expect_true(
+    std::strstr(result.response_text, "Wednesday, July 22, 2026 at 4 PM") != 0,
+    "relative callback readback uses resolved date once");
+  expect_true(
+    std::strstr(result.response_text, "July 15, 2026 Wednesday") == 0,
+    "relative callback readback does not prepend current date");
+}
+
 static void completed_intake_reads_back_details_when_asked(void)
 {
   Config config;
@@ -721,6 +890,10 @@ int main(void)
   structured_response_composes_without_ai();
   completed_intake_ends_retell_call();
   phone_confirmation_closes_without_final_reconfirmation();
+  incomplete_phone_is_reasked_and_not_closed();
+  rejected_phone_confirmation_forces_full_number_retry();
+  phone_what_did_you_get_reasks_full_number();
+  relative_callback_readback_does_not_duplicate_dates();
   completed_intake_reads_back_details_when_asked();
   retell_call_details_select_customer_number();
   calling_number_question_uses_metadata_or_requests_dictation();

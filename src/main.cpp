@@ -712,6 +712,10 @@ static void apply_relative_callback_time_fallback(
     return;
   }
   cerebras_v3::copy_text(
+    interpretation->callback_date,
+    resolved,
+    cerebras_v3::max_text);
+  cerebras_v3::copy_text(
     interpretation->callback_time,
     resolved,
     cerebras_v3::max_text);
@@ -1978,6 +1982,42 @@ static bool caller_asks_for_collected_details(const char* message, const cerebra
       contains_text(interpretation->faq_question, "provided")));
 }
 
+static bool caller_asks_what_number_was_captured(const char* message)
+{
+  char lowered[text_capacity];
+  if (message == 0)
+  {
+    return false;
+  }
+  lowercase_text(lowered, message, text_capacity);
+  return
+    contains_text(lowered, "what did you get") ||
+    contains_text(lowered, "what did you got") ||
+    contains_text(lowered, "what number did you get") ||
+    contains_text(lowered, "what number do you have") ||
+    contains_text(lowered, "what did you write") ||
+    contains_text(lowered, "repeat the number");
+}
+
+static bool caller_rejects_phone_readback(const char* message, const cerebras_v3::Interpretation* interpretation)
+{
+  char lowered[text_capacity];
+  if ((interpretation != 0) && (std::strcmp(interpretation->affirmation, "no") == 0))
+  {
+    return true;
+  }
+  if (message == 0)
+  {
+    return false;
+  }
+  lowercase_text(lowered, message, text_capacity);
+  return
+    contains_text(lowered, "no") ||
+    contains_text(lowered, "wrong") ||
+    contains_text(lowered, "not right") ||
+    contains_text(lowered, "not correct");
+}
+
 static bool message_matches_faq_alias(const char* lowered_message, const char* faq_id)
 {
   int index = 0;
@@ -2293,7 +2333,7 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
       }
       return true;
     case cerebras_v3::field_phone:
-      cerebras_v3::copy_text(output, "What is the best callback number?", capacity);
+      cerebras_v3::copy_text(output, "Please say the full ten-digit callback number.", capacity);
       return true;
     case cerebras_v3::field_phone_confirmed:
       append_text(output, capacity, "I have ");
@@ -2541,13 +2581,59 @@ static bool build_rejection_response(
       append_text(output, capacity, "I need a callback time between 9 AM and 5 PM. ");
       break;
     case cerebras_v3::field_phone:
-      append_text(output, capacity, "I need a callback number with at least seven digits. ");
+      append_text(output, capacity, "I need the full ten-digit callback number. ");
       break;
     default:
       return false;
   }
   append_text(output, capacity, question);
   return true;
+}
+
+static bool build_phone_recovery_response(
+  const cerebras_v3::State* state,
+  const cerebras_v3::Plan* plan,
+  cerebras_v3::Field_id previous_requested,
+  const char* message,
+  const cerebras_v3::Interpretation* interpretation,
+  char* output,
+  int capacity)
+{
+  if ((plan == 0) || (output == 0) || (message == 0))
+  {
+    return false;
+  }
+  clear_buffer(output, capacity);
+  if ((previous_requested == cerebras_v3::field_phone_confirmed) &&
+      (plan->next_field == cerebras_v3::field_phone) &&
+      (caller_rejects_phone_readback(message, interpretation) ||
+       caller_asks_what_number_was_captured(message)))
+  {
+    cerebras_v3::copy_text(
+      output,
+      "Okay, I will fix the callback number. Please repeat the full ten-digit number.",
+      capacity);
+    return true;
+  }
+  if ((plan->next_field == cerebras_v3::field_phone) &&
+      caller_asks_what_number_was_captured(message))
+  {
+    if ((state != 0) && (state->fields[cerebras_v3::field_phone].value[0] != '\0'))
+    {
+      append_text(output, capacity, "I had ");
+      append_text(output, capacity, state->fields[cerebras_v3::field_phone].value);
+      append_text(output, capacity, ". Please repeat the full ten-digit callback number.");
+    }
+    else
+    {
+      cerebras_v3::copy_text(
+        output,
+        "I do not have a confirmed number. Please repeat the full ten-digit callback number.",
+        capacity);
+    }
+    return true;
+  }
+  return false;
 }
 
 static bool json_value(const char* json, const char* key, char* output, int capacity)
@@ -2936,6 +3022,17 @@ static void process_chat_turn(
     cerebras_v3::copy_text(interpretation.turn_type, "caller_question", 64);
     cerebras_v3::copy_text(interpretation.answered_field, "none", 64);
     (void)append_collected_details_readback(state, result->response_text, text_capacity);
+  }
+  if (result->response_text[0] == '\0')
+  {
+    (void)build_phone_recovery_response(
+      state,
+      &plan,
+      previous_requested,
+      message,
+      &interpretation,
+      result->response_text,
+      text_capacity);
   }
   if (result->response_text[0] == '\0')
   {
