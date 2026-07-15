@@ -150,18 +150,87 @@ static int spoken_number_value(const char* token)
   if (std::strcmp(token, "ten") == 0) { return 10; }
   if (std::strcmp(token, "eleven") == 0) { return 11; }
   if (std::strcmp(token, "twelve") == 0) { return 12; }
+  if (std::strcmp(token, "thirteen") == 0) { return 13; }
+  if (std::strcmp(token, "fourteen") == 0) { return 14; }
+  if (std::strcmp(token, "fifteen") == 0) { return 15; }
+  if (std::strcmp(token, "sixteen") == 0) { return 16; }
+  if (std::strcmp(token, "seventeen") == 0) { return 17; }
+  if (std::strcmp(token, "eighteen") == 0) { return 18; }
+  if (std::strcmp(token, "nineteen") == 0) { return 19; }
+  if (std::strcmp(token, "twenty") == 0) { return 20; }
+  if (std::strcmp(token, "thirty") == 0) { return 30; }
+  if (std::strcmp(token, "forty") == 0) { return 40; }
+  if (std::strcmp(token, "fifty") == 0) { return 50; }
   return 0;
+}
+
+static int parse_numeric_token(const char* token)
+{
+  int value = 0;
+  int index = 0;
+  if ((token == 0) || (token[0] == '\0'))
+  {
+    return 0;
+  }
+  if ((token[0] < '0') || (token[0] > '9'))
+  {
+    return 0;
+  }
+  while ((token[index] >= '0') && (token[index] <= '9'))
+  {
+    value = (value * 10) + (token[index] - '0');
+    index += 1;
+  }
+  return token[index] == '\0' ? value : 0;
+}
+
+static void token_before_position(
+  const char* lowered,
+  int before,
+  char* output,
+  int capacity,
+  int* token_start)
+{
+  int end = before;
+  int start = 0;
+  int index = 0;
+  if ((lowered == 0) || (output == 0) || (capacity <= 0) || (token_start == 0))
+  {
+    return;
+  }
+  clear_buffer(output, capacity);
+  *token_start = before;
+  while ((end > 0) && (lowered[end - 1] == ' '))
+  {
+    end -= 1;
+  }
+  start = end;
+  while ((start > 0) &&
+         (std::isalnum(static_cast<unsigned char>(lowered[start - 1])) != 0))
+  {
+    start -= 1;
+  }
+  while ((start + index < end) && (index < (capacity - 1)))
+  {
+    output[index] = lowered[start + index];
+    index += 1;
+  }
+  output[index] = '\0';
+  *token_start = start;
 }
 
 static int relative_quantity_before(const char* lowered, const char* unit)
 {
   const char* found = 0;
   int end = 0;
-  int start = 0;
-  int value = 0;
-  int index = 0;
-  char token[16];
-  clear_buffer(token, 16);
+  int last_start = 0;
+  int previous_start = 0;
+  int last_value = 0;
+  int previous_value = 0;
+  char last_token[16];
+  char previous_token[16];
+  clear_buffer(last_token, 16);
+  clear_buffer(previous_token, 16);
   if ((lowered == 0) || (unit == 0))
   {
     return 0;
@@ -176,29 +245,25 @@ static int relative_quantity_before(const char* lowered, const char* unit)
   {
     end -= 1;
   }
-  start = end;
-  while ((start > 0) &&
-         (std::isalnum(static_cast<unsigned char>(lowered[start - 1])) != 0))
+  token_before_position(lowered, end, last_token, 16, &last_start);
+  last_value = parse_numeric_token(last_token);
+  if (last_value == 0)
   {
-    start -= 1;
+    last_value = spoken_number_value(last_token);
   }
-  while ((start + index < end) && (index < 15))
+  if ((last_value >= 1) && (last_value <= 52))
   {
-    token[index] = lowered[start + index];
-    index += 1;
-  }
-  token[index] = '\0';
-  if ((token[0] >= '0') && (token[0] <= '9'))
-  {
-    index = 0;
-    while ((token[index] >= '0') && (token[index] <= '9'))
+    token_before_position(lowered, last_start, previous_token, 16, &previous_start);
+    previous_value = spoken_number_value(previous_token);
+    if (((previous_value == 20) || (previous_value == 30) ||
+         (previous_value == 40) || (previous_value == 50)) &&
+        (last_value >= 1) && (last_value <= 9))
     {
-      value = (value * 10) + (token[index] - '0');
-      index += 1;
+      return ((previous_value + last_value) <= 52) ? (previous_value + last_value) : 0;
     }
-    return (value >= 1) && (value <= 52) ? value : 0;
+    return last_value;
   }
-  return spoken_number_value(token);
+  return 0;
 }
 
 static int weekday_index_from_name(const char* lowered)

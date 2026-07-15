@@ -298,6 +298,57 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     output,
     "Monday, July 20, 2026 after 10 AM",
     "next weekday uses next upcoming weekday with business hour inference");
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "In fourteen days at 4.",
+      2026,
+      7,
+      15,
+      output,
+      cerebras_v3::max_text),
+    "spoken teen day count resolves");
+  expect_text(
+    output,
+    "Wednesday, July 29, 2026 at 4 PM",
+    "fourteen days becomes exactly two weeks out");
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "In twenty one days at 4.",
+      2026,
+      7,
+      15,
+      output,
+      cerebras_v3::max_text),
+    "compound spoken day count resolves");
+  expect_text(
+    output,
+    "Wednesday, August 05, 2026 at 4 PM",
+    "twenty one days becomes three weeks out");
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "In thirteen weeks at 4.",
+      2026,
+      7,
+      15,
+      output,
+      cerebras_v3::max_text),
+    "spoken teen week count resolves");
+  expect_text(
+    output,
+    "Wednesday, October 14, 2026 at 4 PM",
+    "thirteen weeks becomes ninety one days out");
+  expect_true(
+    !resolve_relative_callback_time_from_date(
+      "In fifty three weeks at 4.",
+      2026,
+      7,
+      15,
+      output,
+      cerebras_v3::max_text),
+    "spoken week count above supported range is rejected");
   expect_true(
     !resolve_relative_callback_time_from_date(
       "Next week at 3 PM",
