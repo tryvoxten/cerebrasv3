@@ -1081,6 +1081,33 @@ static void callback_time_confirmation_advances_or_reasks(void)
   expect_true(state.fields[cerebras_v3::field_callback_time].status == cerebras_v3::status_missing, "callback no clears time");
   expect_true(plan.next_field == cerebras_v3::field_callback_date, "callback no asks again");
 }
+
+static void callback_date_answer_with_raw_time_captures_both_parts(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::init_state(&state);
+  mark_callback_prerequisites(&state);
+  state.last_requested = cerebras_v3::field_callback_date;
+  cerebras_v3::clear_interpretation(&interpretation);
+  cerebras_v3::copy_text(interpretation.turn_type, "field_answer", 64);
+  cerebras_v3::copy_text(interpretation.answered_field, "callback_date", 64);
+  cerebras_v3::copy_text(interpretation.callback_date, "tomorrow", cerebras_v3::max_text);
+
+  cerebras_v3::merge_interpretation(&state, &interpretation, "tomorrow at 3");
+  plan = cerebras_v3::plan_next(&state);
+
+  expect_true(
+    state.fields[cerebras_v3::field_callback_date].status == cerebras_v3::status_captured,
+    "callback date split captures date");
+  expect_true(
+    state.fields[cerebras_v3::field_callback_time].status == cerebras_v3::status_captured,
+    "callback date split still recovers raw time");
+  expect_true(
+    plan.next_field == cerebras_v3::field_callback_time,
+    "callback date split asks confirmation after raw time recovery");
+}
 }
 
 int main(void)
@@ -1122,6 +1149,7 @@ int main(void)
   unsolicited_spelled_letters_capture();
   callback_time_must_be_inside_allowed_window();
   callback_time_confirmation_advances_or_reasks();
+  callback_date_answer_with_raw_time_captures_both_parts();
   if (failures == 0)
   {
     write_line("planner_tests: PASS");

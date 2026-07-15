@@ -270,6 +270,127 @@ static void normalize_spoken_callback_hour(
   append_text(output, capacity, &input[index]);
 }
 
+static int bare_business_hour_period(int hour)
+{
+  if ((hour >= 9) && (hour <= 11))
+  {
+    return 1;
+  }
+  if ((hour == 12) || ((hour >= 1) && (hour <= 5)))
+  {
+    return 2;
+  }
+  return 0;
+}
+
+static bool parse_bare_hour_after_marker(
+  const char* lowered,
+  const char* marker,
+  int* hour)
+{
+  const char* found = 0;
+  int index = 0;
+  char token[16];
+  int value = 0;
+  if ((lowered == 0) || (marker == 0) || (hour == 0))
+  {
+    return false;
+  }
+  found = std::strstr(lowered, marker);
+  if (found == 0)
+  {
+    return false;
+  }
+  found += std::strlen(marker);
+  while ((*found == ' ') || (*found == '\t'))
+  {
+    found += 1;
+  }
+  clear_buffer(token, 16);
+  while ((found[index] != '\0') &&
+         (std::isalnum(static_cast<unsigned char>(found[index])) != 0) &&
+         (index < 15))
+  {
+    token[index] = found[index];
+    index += 1;
+  }
+  token[index] = '\0';
+  if (token[0] == '\0')
+  {
+    return false;
+  }
+  if ((token[0] >= '0') && (token[0] <= '9'))
+  {
+    index = 0;
+    while ((token[index] >= '0') && (token[index] <= '9'))
+    {
+      value = (value * 10) + (token[index] - '0');
+      index += 1;
+    }
+  }
+  else
+  {
+    value = spoken_number_value(token);
+  }
+  if (bare_business_hour_period(value) == 0)
+  {
+    return false;
+  }
+  *hour = value;
+  return true;
+}
+
+static bool copy_bare_business_hour_window(
+  const char* lowered,
+  char* output,
+  int capacity,
+  bool* has_preposition)
+{
+  int hour = 0;
+  int period = 0;
+  char hour_text[8];
+  const char* prefix = "";
+  if ((lowered == 0) || (output == 0) || (capacity <= 0) || (has_preposition == 0))
+  {
+    return false;
+  }
+  clear_buffer(hour_text, 8);
+  if (parse_bare_hour_after_marker(lowered, "at ", &hour))
+  {
+    prefix = "";
+    *has_preposition = false;
+  }
+  else if (parse_bare_hour_after_marker(lowered, "around ", &hour))
+  {
+    prefix = "around ";
+    *has_preposition = true;
+  }
+  else if (parse_bare_hour_after_marker(lowered, "after ", &hour))
+  {
+    prefix = "after ";
+    *has_preposition = true;
+  }
+  else if (parse_bare_hour_after_marker(lowered, "before ", &hour))
+  {
+    prefix = "before ";
+    *has_preposition = true;
+  }
+  else
+  {
+    return false;
+  }
+  period = bare_business_hour_period(hour);
+  if (period == 0)
+  {
+    return false;
+  }
+  std::snprintf(hour_text, sizeof(hour_text), "%d", hour);
+  append_text(output, capacity, prefix);
+  append_text(output, capacity, hour_text);
+  append_text(output, capacity, (period == 1) ? " AM" : " PM");
+  return true;
+}
+
 static bool extract_relative_callback_window(
   const char* input,
   const char* lowered,
@@ -311,6 +432,10 @@ static bool extract_relative_callback_window(
     std::memcpy(extracted, &input[start], static_cast<unsigned long>(length));
     extracted[length] = '\0';
     normalize_spoken_callback_hour(extracted, output, capacity);
+    return true;
+  }
+  if (copy_bare_business_hour_window(lowered, output, capacity, has_preposition))
+  {
     return true;
   }
   if (std::strstr(lowered, "morning") != 0)

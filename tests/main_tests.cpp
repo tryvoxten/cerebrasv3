@@ -228,6 +228,20 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     output,
     "Tuesday, July 14, 2026 at 3 PM",
     "ASR word-based hour becomes a validated numeric time");
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "Tomorrow at 3.",
+      2026,
+      7,
+      15,
+      output,
+      cerebras_v3::max_text),
+    "bare business-hour callback resolves");
+  expect_text(
+    output,
+    "Thursday, July 16, 2026 at 3 PM",
+    "bare afternoon business hour becomes PM");
   expect_true(
     !resolve_relative_callback_time_from_date(
       "Next week at 3 PM",
