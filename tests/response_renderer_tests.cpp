@@ -78,6 +78,29 @@ static void readback_response_contains_exact_value(void)
   expect_true(result.plan.structure == cerebras_v3::response_structure_readback_ask, "callback uses readback structure");
 }
 
+static void readback_response_uses_single_complete_callback_slot(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan field_plan;
+  cerebras_v3::Response_context context;
+  cerebras_v3::Response_render_options options;
+  cerebras_v3::Response_render_result result;
+  prepare(&state, &interpretation, &field_plan, &context, cerebras_v3::field_callback_time);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "July 15, 2026", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_callback_date].status = cerebras_v3::status_captured;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "Wednesday, July 22, 2026 at 4 PM", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
+  cerebras_v3::init_response_render_options(&options);
+  expect_true(cerebras_v3::render_structured_response(&state, &context, &options, &result), "complete callback readback renders");
+  expect_true(
+    std::strstr(result.text, "Wednesday, July 22, 2026 at 4 PM") != 0,
+    "complete callback readback includes captured slot");
+  expect_true(
+    std::strstr(result.text, "July 15, 2026 Wednesday") == 0,
+    "complete callback readback does not double-confirm date");
+}
+
 static bool unsafe_ai_slot(
   cerebras_v3::Response_act,
   cerebras_v3::Field_id,
@@ -115,6 +138,7 @@ int main(void)
 {
   normal_response_composes_and_records_history();
   readback_response_contains_exact_value();
+  readback_response_uses_single_complete_callback_slot();
   unsafe_ai_slot_falls_back_to_preset();
   if (failures == 0)
   {

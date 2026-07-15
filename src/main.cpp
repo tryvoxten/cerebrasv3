@@ -2216,25 +2216,112 @@ static void append_clean_field(char* output, int capacity, const char* value)
   append_text(output, capacity, cleaned);
 }
 
+static bool callback_text_looks_complete(const char* value)
+{
+  char lowered[text_capacity];
+  lowercase_callback_text(lowered, value, text_capacity);
+  return
+    contains_text(lowered, " at ") ||
+    contains_text(lowered, "monday") ||
+    contains_text(lowered, "tuesday") ||
+    contains_text(lowered, "wednesday") ||
+    contains_text(lowered, "thursday") ||
+    contains_text(lowered, "friday") ||
+    contains_text(lowered, "saturday") ||
+    contains_text(lowered, "sunday") ||
+    contains_text(lowered, "january") ||
+    contains_text(lowered, "february") ||
+    contains_text(lowered, "march") ||
+    contains_text(lowered, "april") ||
+    contains_text(lowered, "june") ||
+    contains_text(lowered, "july") ||
+    contains_text(lowered, "august") ||
+    contains_text(lowered, "september") ||
+    contains_text(lowered, "october") ||
+    contains_text(lowered, "november") ||
+    contains_text(lowered, "december");
+}
+
+static void append_capped_words(char* output, int capacity, const char* value, int max_words)
+{
+  int input = 0;
+  int words = 0;
+  bool in_word = false;
+  char one[2];
+  if ((output == 0) || (value == 0) || (capacity <= 0) || (max_words <= 0))
+  {
+    return;
+  }
+  one[1] = '\0';
+  while (value[input] != '\0')
+  {
+    const bool separator =
+      (value[input] == ' ') ||
+      (value[input] == '\t') ||
+      (value[input] == '\n');
+    if (separator)
+    {
+      if (in_word)
+      {
+        words += 1;
+        if (words >= max_words)
+        {
+          break;
+        }
+      }
+      in_word = false;
+    }
+    else
+    {
+      in_word = true;
+    }
+    one[0] = value[input];
+    append_text(output, capacity, one);
+    if (static_cast<int>(std::strlen(output)) >= (capacity - 1))
+    {
+      break;
+    }
+    input += 1;
+  }
+}
+
 static void append_callback_datetime_clean(const cerebras_v3::State* state, char* output, int capacity)
 {
+  const char* date = 0;
+  const char* time = 0;
+  char combined[cerebras_v3::max_text * 2];
   if (state == 0)
   {
     return;
   }
-  if (state->fields[cerebras_v3::field_callback_date].value[0] != '\0')
+  clear_buffer(combined, cerebras_v3::max_text * 2);
+  date = state->fields[cerebras_v3::field_callback_date].value;
+  time = state->fields[cerebras_v3::field_callback_time].value;
+  if ((time[0] != '\0') &&
+      ((std::strcmp(date, time) == 0) ||
+       callback_text_looks_complete(time)))
   {
-    append_clean_field(output, capacity, state->fields[cerebras_v3::field_callback_date].value);
+    append_capped_words(output, capacity, time, 10);
+    return;
   }
-  if ((state->fields[cerebras_v3::field_callback_time].value[0] != '\0') &&
-      (std::strcmp(state->fields[cerebras_v3::field_callback_date].value, state->fields[cerebras_v3::field_callback_time].value) != 0))
+  if ((date[0] != '\0') && (time[0] == '\0') && callback_text_looks_complete(date))
   {
-    if (state->fields[cerebras_v3::field_callback_date].value[0] != '\0')
+    append_capped_words(output, capacity, date, 10);
+    return;
+  }
+  if (date[0] != '\0')
+  {
+    append_clean_field(combined, cerebras_v3::max_text * 2, date);
+  }
+  if ((time[0] != '\0') && (std::strcmp(date, time) != 0))
+  {
+    if (combined[0] != '\0')
     {
-      append_text(output, capacity, " ");
+      append_text(combined, cerebras_v3::max_text * 2, " ");
     }
-    append_clean_field(output, capacity, state->fields[cerebras_v3::field_callback_time].value);
+    append_clean_field(combined, cerebras_v3::max_text * 2, time);
   }
+  append_capped_words(output, capacity, combined, 10);
 }
 
 static void append_final_confirmation(const cerebras_v3::State* state, char* output, int capacity)

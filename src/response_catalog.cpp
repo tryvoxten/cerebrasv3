@@ -1,4 +1,5 @@
 #include <response_catalog.h>
+#include <cctype>
 #include <cstring>
 
 namespace cerebras_v3
@@ -75,7 +76,7 @@ static const Phrase_definition phrase_catalog[] =
   {701, response_act_confirm_correction, field_none, department_unknown, phrase_variant_any, 0, 9, "Thanks, I've updated that."},
   {702, response_act_confirm_correction, field_none, department_unknown, phrase_variant_any, 0, 9, "Got it, I changed that."},
 
-  {801, response_act_readback, field_callback_time, department_unknown, phrase_variant_any, 0, 9, "Okay, {callback_date} {callback_time}."},
+  {801, response_act_readback, field_callback_time, department_unknown, phrase_variant_any, 0, 9, "Okay, {callback_slot}."},
   {811, response_act_readback, field_phone_confirmed, department_unknown, phrase_variant_any, 0, 9, "I have {phone}."},
   {821, response_act_readback, field_final_confirmed, department_unknown, phrase_variant_any, 0, 9, "I have your request and callback details ready for the {department} team."},
 
@@ -207,6 +208,12 @@ static bool required_values_available(
   }
   if (text_contains(phrase->text, "{callback_date}") &&
       (state_field_value(state, field_callback_date)[0] == '\0'))
+  {
+    return false;
+  }
+  if (text_contains(phrase->text, "{callback_slot}") &&
+      (state_field_value(state, field_callback_date)[0] == '\0') &&
+      (state_field_value(state, field_callback_time)[0] == '\0'))
   {
     return false;
   }
@@ -500,11 +507,147 @@ static void append_text(char* output, int capacity, const char* text)
   output[output_length] = '\0';
 }
 
+static void lowercase_local(char* output, const char* input, int capacity)
+{
+  int index = 0;
+  if ((output == 0) || (capacity <= 0))
+  {
+    return;
+  }
+  output[0] = '\0';
+  if (input == 0)
+  {
+    return;
+  }
+  while ((input[index] != '\0') && (index < (capacity - 1)))
+  {
+    output[index] = static_cast<char>(
+      std::tolower(static_cast<unsigned char>(input[index])));
+    index += 1;
+  }
+  output[index] = '\0';
+}
+
+static bool contains_local(const char* text, const char* pattern)
+{
+  return
+    (text != 0) &&
+    (pattern != 0) &&
+    (std::strstr(text, pattern) != 0);
+}
+
+static bool callback_text_looks_complete(const char* value)
+{
+  char lowered[max_text];
+  lowercase_local(lowered, value, max_text);
+  return
+    contains_local(lowered, " at ") ||
+    contains_local(lowered, "monday") ||
+    contains_local(lowered, "tuesday") ||
+    contains_local(lowered, "wednesday") ||
+    contains_local(lowered, "thursday") ||
+    contains_local(lowered, "friday") ||
+    contains_local(lowered, "saturday") ||
+    contains_local(lowered, "sunday") ||
+    contains_local(lowered, "january") ||
+    contains_local(lowered, "february") ||
+    contains_local(lowered, "march") ||
+    contains_local(lowered, "april") ||
+    contains_local(lowered, "june") ||
+    contains_local(lowered, "july") ||
+    contains_local(lowered, "august") ||
+    contains_local(lowered, "september") ||
+    contains_local(lowered, "october") ||
+    contains_local(lowered, "november") ||
+    contains_local(lowered, "december");
+}
+
+static void append_capped_words(char* output, int capacity, const char* value, int max_words)
+{
+  int input = 0;
+  int words = 0;
+  bool in_word = false;
+  char one[2];
+  if ((output == 0) || (value == 0) || (capacity <= 0) || (max_words <= 0))
+  {
+    return;
+  }
+  one[1] = '\0';
+  while (value[input] != '\0')
+  {
+    const bool separator =
+      (value[input] == ' ') ||
+      (value[input] == '\t') ||
+      (value[input] == '\n');
+    if (separator)
+    {
+      if (in_word)
+      {
+        words += 1;
+        if (words >= max_words)
+        {
+          break;
+        }
+      }
+      in_word = false;
+    }
+    else
+    {
+      in_word = true;
+    }
+    one[0] = value[input];
+    append_text(output, capacity, one);
+    if (static_cast<int>(std::strlen(output)) >= (capacity - 1))
+    {
+      break;
+    }
+    input += 1;
+  }
+}
+
+static void callback_slot_value(const State* state, char* output, int capacity)
+{
+  const char* date = state_field_value(state, field_callback_date);
+  const char* time = state_field_value(state, field_callback_time);
+  char combined[max_text * 2];
+  combined[0] = '\0';
+  if ((output != 0) && (capacity > 0))
+  {
+    output[0] = '\0';
+  }
+  if ((time[0] != '\0') &&
+      ((std::strcmp(date, time) == 0) ||
+       callback_text_looks_complete(time)))
+  {
+    append_capped_words(output, capacity, time, 10);
+    return;
+  }
+  if ((date[0] != '\0') && (time[0] == '\0') && callback_text_looks_complete(date))
+  {
+    append_capped_words(output, capacity, date, 10);
+    return;
+  }
+  if (date[0] != '\0')
+  {
+    append_text(combined, max_text * 2, date);
+  }
+  if ((time[0] != '\0') && (std::strcmp(date, time) != 0))
+  {
+    if (combined[0] != '\0')
+    {
+      append_text(combined, max_text * 2, " ");
+    }
+    append_text(combined, max_text * 2, time);
+  }
+  append_capped_words(output, capacity, combined, 10);
+}
+
 static const char* placeholder_value(
   const char* placeholder,
   const Phrase_context* context)
 {
   const State* state = (context != 0) ? context->state : 0;
+  static char callback_slot[max_text * 2];
   if (std::strcmp(placeholder, "{department}") == 0)
   {
     return department_name((state != 0) ? state->department : department_unknown);
@@ -524,6 +667,11 @@ static const char* placeholder_value(
   if (std::strcmp(placeholder, "{callback_date}") == 0)
   {
     return state_field_value(state, field_callback_date);
+  }
+  if (std::strcmp(placeholder, "{callback_slot}") == 0)
+  {
+    callback_slot_value(state, callback_slot, max_text * 2);
+    return callback_slot;
   }
   if (std::strcmp(placeholder, "{phone}") == 0)
   {

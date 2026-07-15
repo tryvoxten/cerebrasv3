@@ -24,6 +24,42 @@ static void expect_true(bool value, const char* label)
   }
 }
 
+static int word_count(const char* text)
+{
+  int count = 0;
+  int index = 0;
+  bool in_word = false;
+  if (text == 0)
+  {
+    return 0;
+  }
+  while (text[index] != '\0')
+  {
+    const bool separator =
+      (text[index] == ' ') ||
+      (text[index] == '\t') ||
+      (text[index] == '\n');
+    if (separator)
+    {
+      if (in_word)
+      {
+        count += 1;
+      }
+      in_word = false;
+    }
+    else
+    {
+      in_word = true;
+    }
+    index += 1;
+  }
+  if (in_word)
+  {
+    count += 1;
+  }
+  return count;
+}
+
 static void prepare_phrase_context(
   cerebras_v3::State* state,
   cerebras_v3::Response_plan* plan,
@@ -181,6 +217,23 @@ static void placeholders_require_grounded_values_and_render_exactly(void)
   state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
   expect_true(cerebras_v3::render_phrase(phrase, &context, output, 512), "grounded callback readback renders");
   expect_true(std::strcmp(output, "Okay, Friday afternoon.") == 0, "callback placeholder frames value naturally");
+
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "July 15, 2026", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "Wednesday, July 22, 2026 at 4 PM", cerebras_v3::max_text);
+  expect_true(cerebras_v3::render_phrase(phrase, &context, output, 512), "complete callback slot renders");
+  expect_true(
+    std::strcmp(output, "Okay, Wednesday, July 22, 2026 at 4 PM.") == 0,
+    "complete callback slot is not prefixed by stale date");
+  expect_true(
+    std::strstr(output, "July 15, 2026 Wednesday") == 0,
+    "complete callback slot does not duplicate date fields");
+
+  cerebras_v3::copy_text(
+    state.fields[cerebras_v3::field_callback_time].value,
+    "Wednesday, July 22, 2026 at 4 PM with the advisor if possible please",
+    cerebras_v3::max_text);
+  expect_true(cerebras_v3::render_phrase(phrase, &context, output, 512), "long callback slot renders");
+  expect_true(word_count(output) <= 11, "callback slot readback is capped to short wording");
 
   phrase = cerebras_v3::find_phrase_definition(901);
   expect_true(!cerebras_v3::phrase_eligible(phrase, &context), "knowledge answer requires approved answer text");
