@@ -242,6 +242,62 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     output,
     "Thursday, July 16, 2026 at 3 PM",
     "bare afternoon business hour becomes PM");
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "After tomorrow at 3.",
+      2026,
+      7,
+      15,
+      output,
+      cerebras_v3::max_text),
+    "after tomorrow callback resolves");
+  expect_text(
+    output,
+    "Friday, July 17, 2026 at 3 PM",
+    "after tomorrow becomes two days out");
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "The day after tomorrow around four.",
+      2026,
+      7,
+      15,
+      output,
+      cerebras_v3::max_text),
+    "day after tomorrow callback resolves");
+  expect_text(
+    output,
+    "Friday, July 17, 2026 around 4 PM",
+    "day after tomorrow keeps around wording");
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "Monday at 3.",
+      2026,
+      7,
+      15,
+      output,
+      cerebras_v3::max_text),
+    "weekday callback resolves");
+  expect_text(
+    output,
+    "Monday, July 20, 2026 at 3 PM",
+    "weekday becomes the next upcoming weekday");
+  clear_buffer(output, cerebras_v3::max_text);
+  expect_true(
+    resolve_relative_callback_time_from_date(
+      "Next Monday after 10.",
+      2026,
+      7,
+      15,
+      output,
+      cerebras_v3::max_text),
+    "next weekday callback resolves");
+  expect_text(
+    output,
+    "Monday, July 20, 2026 after 10 AM",
+    "next weekday uses next upcoming weekday with business hour inference");
   expect_true(
     !resolve_relative_callback_time_from_date(
       "Next week at 3 PM",

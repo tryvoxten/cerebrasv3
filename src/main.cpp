@@ -201,7 +201,70 @@ static int relative_quantity_before(const char* lowered, const char* unit)
   return spoken_number_value(token);
 }
 
-static int relative_callback_day_offset(const char* lowered)
+static int weekday_index_from_name(const char* lowered)
+{
+  if (lowered == 0)
+  {
+    return -1;
+  }
+  if (std::strstr(lowered, "sunday") != 0) { return 0; }
+  if (std::strstr(lowered, "monday") != 0) { return 1; }
+  if (std::strstr(lowered, "tuesday") != 0) { return 2; }
+  if (std::strstr(lowered, "wednesday") != 0) { return 3; }
+  if (std::strstr(lowered, "thursday") != 0) { return 4; }
+  if (std::strstr(lowered, "friday") != 0) { return 5; }
+  if (std::strstr(lowered, "saturday") != 0) { return 6; }
+  return -1;
+}
+
+static int current_weekday_index(
+  int reference_year,
+  int reference_month,
+  int reference_day)
+{
+  std::tm reference;
+  std::memset(&reference, 0, sizeof(reference));
+  reference.tm_year = reference_year - 1900;
+  reference.tm_mon = reference_month - 1;
+  reference.tm_mday = reference_day;
+  reference.tm_hour = 12;
+  reference.tm_isdst = -1;
+  if (std::mktime(&reference) == static_cast<std::time_t>(-1))
+  {
+    return -1;
+  }
+  return reference.tm_wday;
+}
+
+static int weekday_callback_day_offset(
+  const char* lowered,
+  int reference_year,
+  int reference_month,
+  int reference_day)
+{
+  const int target = weekday_index_from_name(lowered);
+  const int current = current_weekday_index(
+    reference_year,
+    reference_month,
+    reference_day);
+  int offset = 0;
+  if ((target < 0) || (current < 0))
+  {
+    return 0;
+  }
+  offset = (target - current + 7) % 7;
+  if (offset == 0)
+  {
+    offset = 7;
+  }
+  return offset;
+}
+
+static int relative_callback_day_offset(
+  const char* lowered,
+  int reference_year,
+  int reference_month,
+  int reference_day)
 {
   const bool relative_marker =
     (lowered != 0) &&
@@ -215,9 +278,23 @@ static int relative_callback_day_offset(const char* lowered)
   {
     return 0;
   }
+  if ((std::strstr(lowered, "day after tomorrow") != 0) ||
+      (std::strstr(lowered, "after tomorrow") != 0))
+  {
+    return 2;
+  }
   if (std::strstr(lowered, "tomorrow") != 0)
   {
     return 1;
+  }
+  quantity = weekday_callback_day_offset(
+    lowered,
+    reference_year,
+    reference_month,
+    reference_day);
+  if (quantity > 0)
+  {
+    return quantity;
   }
   if (!relative_marker)
   {
@@ -490,7 +567,11 @@ static bool resolve_relative_callback_time_from_date(
   clear_buffer(date_text, 96);
   clear_buffer(window, 64);
   lowercase_callback_text(lowered, input, cerebras_v3::max_text);
-  day_offset = relative_callback_day_offset(lowered);
+  day_offset = relative_callback_day_offset(
+    lowered,
+    reference_year,
+    reference_month,
+    reference_day);
   if ((day_offset <= 0) ||
       !extract_relative_callback_window(
         input,
