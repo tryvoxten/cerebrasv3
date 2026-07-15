@@ -970,6 +970,94 @@ static bool is_captured(const Field* field)
   return result;
 }
 
+static bool request_too_generic_for_sales(const char* request)
+{
+  char lowered[max_text];
+  if ((request == 0) || (request[0] == '\0'))
+  {
+    return false;
+  }
+  lowercase(lowered, request, max_text);
+  if (contains_text(lowered, "suv") ||
+      contains_text(lowered, "truck") ||
+      contains_text(lowered, "sedan") ||
+      contains_text(lowered, "van") ||
+      contains_text(lowered, "hybrid") ||
+      contains_text(lowered, "electric") ||
+      contains_text(lowered, " ev") ||
+      contains_text(lowered, "used") ||
+      contains_text(lowered, "new") ||
+      contains_text(lowered, "trade") ||
+      contains_text(lowered, "financ") ||
+      contains_text(lowered, "payment") ||
+      contains_text(lowered, "lease"))
+  {
+    return false;
+  }
+  return
+    contains_text(lowered, "looking for a car") ||
+    contains_text(lowered, "looking for car") ||
+    contains_text(lowered, "looking for a vehicle") ||
+    contains_text(lowered, "looking for vehicle") ||
+    contains_text(lowered, "interested in a car") ||
+    contains_text(lowered, "interested in a vehicle") ||
+    contains_text(lowered, "need a car") ||
+    contains_text(lowered, "need a vehicle") ||
+    contains_text(lowered, "buy a car") ||
+    contains_text(lowered, "buy a vehicle");
+}
+
+static bool request_too_generic_for_parts(const char* request)
+{
+  char lowered[max_text];
+  if ((request == 0) || (request[0] == '\0'))
+  {
+    return false;
+  }
+  lowercase(lowered, request, max_text);
+  if (contains_text(lowered, "brake") ||
+      contains_text(lowered, "pad") ||
+      contains_text(lowered, "rotor") ||
+      contains_text(lowered, "battery") ||
+      contains_text(lowered, "tire") ||
+      contains_text(lowered, "key fob") ||
+      contains_text(lowered, "cargo") ||
+      contains_text(lowered, "mat") ||
+      contains_text(lowered, "wiper") ||
+      contains_text(lowered, "mirror") ||
+      contains_text(lowered, "filter") ||
+      contains_text(lowered, "sensor") ||
+      contains_text(lowered, "bumper") ||
+      contains_text(lowered, "headlight") ||
+      contains_text(lowered, "tail light") ||
+      contains_text(lowered, "taillight") ||
+      contains_text(lowered, "spark") ||
+      contains_text(lowered, "plug"))
+  {
+    return false;
+  }
+  return
+    contains_text(lowered, "need a part") ||
+    contains_text(lowered, "looking for a part") ||
+    contains_text(lowered, "looking for parts") ||
+    contains_text(lowered, "parts request") ||
+    contains_text(lowered, "part for my car") ||
+    contains_text(lowered, "part for my vehicle");
+}
+
+static bool request_too_generic_for_department(Department department, const char* request)
+{
+  if (department == department_sales)
+  {
+    return request_too_generic_for_sales(request);
+  }
+  if (department == department_parts)
+  {
+    return request_too_generic_for_parts(request);
+  }
+  return false;
+}
+
 static void init_field(Field* field)
 {
   if (field != 0)
@@ -1228,7 +1316,12 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
   }
   if (!is_captured(&state->fields[field_request]))
   {
-    capture(&state->fields[field_request], interpretation->request, 88);
+    const Department effective_department =
+      (department != department_unknown) ? department : state->department;
+    if (!request_too_generic_for_department(effective_department, interpretation->request))
+    {
+      capture(&state->fields[field_request], interpretation->request, 88);
+    }
   }
   if (!is_captured(&state->fields[field_callback_date]) ||
       !is_captured(&state->fields[field_callback_time]))

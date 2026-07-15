@@ -776,6 +776,82 @@ static void completed_intake_reads_back_details_when_asked(void)
   expect_true(std::strchr(result.response_text, '?') == 0, "detail readback does not restart questioning");
 }
 
+static void vague_sales_request_keeps_model_followup(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_sales;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "sales", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "sales request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Peter Russell", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "R U S S E L L", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.last_requested = cerebras_v3::field_request;
+
+  process_chat_turn(
+    &state,
+    &config,
+    "I'm looking for a car.",
+    "Any specific model or type of car?",
+    "",
+    &result);
+
+  expect_true(
+    state.fields[cerebras_v3::field_request].status == cerebras_v3::status_missing,
+    "generic sales opener does not complete request");
+  expect_text(result.next_field, "request", "generic sales opener keeps request field active");
+  expect_true(
+    std::strstr(result.response_text, "specific model or type") != 0,
+    "generic sales opener asks the model/type followup");
+}
+
+static void vague_parts_request_keeps_part_followup(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_parts;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "parts", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "parts request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Peter Russell", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "R U S S E L L", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_vehicle].value, "2021 Hyundai Tucson", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_vehicle].status = cerebras_v3::status_captured;
+  state.last_requested = cerebras_v3::field_request;
+
+  process_chat_turn(
+    &state,
+    &config,
+    "I need a part.",
+    "Which specific part should the parts team check?",
+    "",
+    &result);
+
+  expect_true(
+    state.fields[cerebras_v3::field_request].status == cerebras_v3::status_missing,
+    "generic parts opener does not complete request");
+  expect_text(result.next_field, "request", "generic parts opener keeps request field active");
+  expect_true(
+    std::strstr(result.response_text, "specific part") != 0,
+    "generic parts opener asks the specific-part followup");
+}
+
 static void retell_call_details_select_customer_number(void)
 {
   char number[64];
@@ -895,6 +971,8 @@ int main(void)
   phone_what_did_you_get_reasks_full_number();
   relative_callback_readback_does_not_duplicate_dates();
   completed_intake_reads_back_details_when_asked();
+  vague_sales_request_keeps_model_followup();
+  vague_parts_request_keeps_part_followup();
   retell_call_details_select_customer_number();
   calling_number_question_uses_metadata_or_requests_dictation();
   faq_priority_handles_multi_question_turns();

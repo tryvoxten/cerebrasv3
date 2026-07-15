@@ -1631,7 +1631,11 @@ static void apply_local_interpretation_fallback(
              contains_text(lowered, "test drive") ||
              contains_text(lowered, "trade in") ||
              contains_text(lowered, "trade-in") ||
-             contains_text(lowered, "inventory"))
+             contains_text(lowered, "inventory") ||
+             contains_text(lowered, "looking for a car") ||
+             contains_text(lowered, "looking for car") ||
+             contains_text(lowered, "looking for a vehicle") ||
+             contains_text(lowered, "looking for vehicle"))
     {
       cerebras_v3::copy_text(interpretation->department, "sales", 32);
     }
@@ -1662,7 +1666,13 @@ static void apply_local_interpretation_fallback(
     {
       cerebras_v3::copy_text(interpretation->intent, "parts request", cerebras_v3::max_text);
     }
-    else if (contains_text(lowered, "sales") || contains_text(lowered, "buy") || contains_text(lowered, "lease"))
+    else if (contains_text(lowered, "sales") ||
+             contains_text(lowered, "buy") ||
+             contains_text(lowered, "lease") ||
+             contains_text(lowered, "looking for a car") ||
+             contains_text(lowered, "looking for car") ||
+             contains_text(lowered, "looking for a vehicle") ||
+             contains_text(lowered, "looking for vehicle"))
     {
       cerebras_v3::copy_text(interpretation->intent, "sales request", cerebras_v3::max_text);
     }
