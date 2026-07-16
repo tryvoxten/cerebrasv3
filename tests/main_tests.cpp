@@ -202,7 +202,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
   char output[cerebras_v3::max_text];
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "Two weeks from now at 3 PM.",
       2026,
       6,
@@ -216,7 +216,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "relative callback becomes concrete day and time");
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "How about three PM in two weeks today?",
       2026,
       6,
@@ -230,7 +230,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "ASR word-based hour becomes a validated numeric time");
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "Tomorrow at 3.",
       2026,
       7,
@@ -244,7 +244,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "bare afternoon business hour becomes PM");
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "After tomorrow at 3.",
       2026,
       7,
@@ -258,7 +258,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "after tomorrow becomes two days out");
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "The day after tomorrow around four.",
       2026,
       7,
@@ -272,7 +272,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "day after tomorrow keeps around wording");
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "Monday at 3.",
       2026,
       7,
@@ -286,7 +286,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "weekday becomes the next upcoming weekday");
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "Next Monday after 10.",
       2026,
       7,
@@ -300,7 +300,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "next weekday uses next upcoming weekday with business hour inference");
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "In fourteen days at 4.",
       2026,
       7,
@@ -314,7 +314,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "fourteen days becomes exactly two weeks out");
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "In twenty one days at 4.",
       2026,
       7,
@@ -328,7 +328,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "twenty one days becomes three weeks out");
   clear_buffer(output, cerebras_v3::max_text);
   expect_true(
-    resolve_relative_callback_time_from_date(
+    cerebras_v3::resolve_relative_callback_time_from_date(
       "In thirteen weeks at 4.",
       2026,
       7,
@@ -341,7 +341,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
     "Wednesday, October 14, 2026 at 4 PM",
     "thirteen weeks becomes ninety one days out");
   expect_true(
-    !resolve_relative_callback_time_from_date(
+    !cerebras_v3::resolve_relative_callback_time_from_date(
       "In fifty three weeks at 4.",
       2026,
       7,
@@ -350,7 +350,7 @@ static void relative_callback_time_resolves_to_concrete_date(void)
       cerebras_v3::max_text),
     "spoken week count above supported range is rejected");
   expect_true(
-    !resolve_relative_callback_time_from_date(
+    !cerebras_v3::resolve_relative_callback_time_from_date(
       "Next week at 3 PM",
       2026,
       6,
