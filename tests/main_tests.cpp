@@ -1,9 +1,10 @@
+#include <caller_number.h>
+#include <relative_callback_time.h>
+#include <server_runtime.h>
 #include <vector>
+#include <sys/socket.h>
 #include <sys/wait.h>
-
-#define main retell_server_main
-#include "../src/main.cpp"
-#undef main
+#include <unistd.h>
 
 static int failures = 0;
 

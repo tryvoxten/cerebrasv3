@@ -1,9 +1,11 @@
 #include <planner.h>
+#include <caller_number.h>
 #include <generated_kb.h>
 #include <prompt_sections.h>
 #include <relative_callback_time.h>
 #include <response_ai.h>
 #include <response_renderer.h>
+#include <server_runtime.h>
 #include <arpa/inet.h>
 #include <curl/curl.h>
 #include <netinet/in.h>
@@ -15,60 +17,15 @@
 #include <cstring>
 #include <ctime>
 
-namespace
-{
-const int request_capacity = 8192;
-const int response_capacity = 8192;
-const int text_capacity = 1024;
-const int cerebras_capacity = 8192;
-const int cerebras_payload_capacity = 16384;
-const int cerebras_system_capacity = 8192;
-const int context_capacity = 768;
-const int summary_capacity = 4096;
-const int websocket_capacity = 262144;
-const int default_port = 8080;
-
-struct Config
-{
-  int port;
-  char shared_secret[128];
-  char cerebras_key[256];
-  char cerebras_model[128];
-  char cerebras_url[256];
-  char delivery_webhook_url[256];
-  char delivery_webhook_secret[128];
-  bool cerebras_debug;
-  bool structured_responses;
-  bool ai_response_slots;
-};
-
 struct Buffer
 {
   char data[cerebras_capacity];
   int length;
 };
 
-struct Turn_result
-{
-  char response_text[text_capacity];
-  char state_json[2048];
-  char employee_summary[summary_capacity];
-  char next_field[64];
-  char turn_type[64];
-  char answered_field[64];
-  char faq_id[64];
-  char affirmation[32];
-  bool used_interpreter;
-  bool used_generator;
-  bool used_kb_answer;
-  bool delivery_attempted;
-  bool delivery_sent;
-  bool end_call;
-};
-
 static bool json_value(const char* json, const char* key, char* output, int capacity);
 
-static void clear_buffer(char* buffer, int capacity)
+void clear_buffer(char* buffer, int capacity)
 {
   if ((buffer != 0) && (capacity > 0))
   {
@@ -489,7 +446,7 @@ static bool env_enabled(const char* value)
      (std::strcmp(value, "on") == 0));
 }
 
-static void load_config(char** envp, Config* config)
+void load_config(char** envp, Config* config)
 {
   const char* value = 0;
   if (config == 0)
@@ -1239,7 +1196,7 @@ static void set_call_id_if_present(cerebras_v3::State* state, const char* source
   }
 }
 
-static void set_call_id_from_websocket_path(cerebras_v3::State* state, const char* request, const Config* config)
+void set_call_id_from_websocket_path(cerebras_v3::State* state, const char* request, const Config* config)
 {
   const char* path = 0;
   const char* end = 0;
@@ -1563,7 +1520,7 @@ static bool best_matching_faq_id(const char* lowered_message, char* output, int 
   return output[0] != '\0';
 }
 
-static void correct_faq_id_from_message(const char* message, cerebras_v3::Interpretation* interpretation)
+void correct_faq_id_from_message(const char* message, cerebras_v3::Interpretation* interpretation)
 {
   char lowered[text_capacity];
   char best_faq_id[64];
@@ -2254,7 +2211,7 @@ static long json_long_value(const char* json, const char* key, long fallback)
   return any ? value : fallback;
 }
 
-static void clear_turn_result(Turn_result* result)
+void clear_turn_result(Turn_result* result)
 {
   if (result == 0)
   {
@@ -2274,109 +2231,6 @@ static void clear_turn_result(Turn_result* result)
   result->delivery_attempted = false;
   result->delivery_sent = false;
   result->end_call = false;
-}
-
-static bool caller_asks_for_calling_number(const char* message)
-{
-  char lowered[text_capacity];
-  lowercase_text(lowered, message, text_capacity);
-  return
-    contains_text(lowered, "number") &&
-    (contains_text(lowered, "what number") ||
-     contains_text(lowered, "which number") ||
-     contains_text(lowered, "check") ||
-     contains_text(lowered, "calling from") ||
-     contains_text(lowered, "this is"));
-}
-
-static void phone_digits_only(char* output, const char* input, int capacity)
-{
-  int input_index = 0;
-  int output_index = 0;
-  clear_buffer(output, capacity);
-  if ((output == 0) || (input == 0) || (capacity <= 0))
-  {
-    return;
-  }
-  while ((input[input_index] != '\0') && (output_index < (capacity - 1)))
-  {
-    if ((input[input_index] >= '0') && (input[input_index] <= '9'))
-    {
-      output[output_index] = input[input_index];
-      output_index += 1;
-    }
-    input_index += 1;
-  }
-  output[output_index] = '\0';
-}
-
-static void caller_number_from_retell_details(
-  const char* event,
-  char* output,
-  int capacity)
-{
-  char direction[32];
-  char number[text_capacity];
-  clear_buffer(output, capacity);
-  clear_buffer(direction, 32);
-  clear_buffer(number, text_capacity);
-  if ((event == 0) || !contains_text(event, "\"call_details\""))
-  {
-    return;
-  }
-  (void)json_value(event, "\"direction\"", direction, 32);
-  if (std::strcmp(direction, "outbound") == 0)
-  {
-    (void)json_value(event, "\"to_number\"", number, text_capacity);
-  }
-  else
-  {
-    (void)json_value(event, "\"from_number\"", number, text_capacity);
-  }
-  phone_digits_only(output, number, capacity);
-}
-
-static bool handle_calling_number_request(
-  cerebras_v3::State* state,
-  const char* caller_text,
-  const char* retell_caller_number,
-  Turn_result* result)
-{
-  if ((state == 0) || (result == 0) ||
-      (state->last_requested != cerebras_v3::field_phone) ||
-      !caller_asks_for_calling_number(caller_text))
-  {
-    return false;
-  }
-  clear_turn_result(result);
-  result->used_interpreter = false;
-  cerebras_v3::copy_text(result->turn_type, "caller_question", 64);
-  cerebras_v3::copy_text(result->answered_field, "none", 64);
-  if ((retell_caller_number != 0) && (retell_caller_number[0] != '\0'))
-  {
-    cerebras_v3::copy_text(
-      state->fields[cerebras_v3::field_phone].value,
-      retell_caller_number,
-      cerebras_v3::max_text);
-    state->fields[cerebras_v3::field_phone].status = cerebras_v3::status_captured;
-    state->fields[cerebras_v3::field_phone].confidence = 100;
-    state->fields[cerebras_v3::field_phone].confirmed = false;
-    state->last_requested = cerebras_v3::field_phone_confirmed;
-    append_text(result->response_text, text_capacity, "The number showing for this call is ");
-    append_text(result->response_text, text_capacity, retell_caller_number);
-    append_text(result->response_text, text_capacity, ". Is that the best number for the team to call?");
-    cerebras_v3::copy_text(result->next_field, "phone_confirmed", 64);
-  }
-  else
-  {
-    cerebras_v3::copy_text(
-      result->response_text,
-      "I can't see a phone number for this call. Please say the best number for the team to call.",
-      text_capacity);
-    cerebras_v3::copy_text(result->next_field, "phone", 64);
-  }
-  cerebras_v3::state_to_json(state, result->state_json, 2048);
-  return true;
 }
 
 static bool has_grounded_acknowledgement(
@@ -2401,7 +2255,7 @@ static bool has_grounded_acknowledgement(
   return meaningful_opening || meaningful_answer;
 }
 
-static bool try_structured_response(
+bool try_structured_response(
   cerebras_v3::State* state,
   const Config* config,
   const cerebras_v3::Plan* field_plan,
@@ -2483,7 +2337,7 @@ static void log_turn_processed(
   log_json_line("turn_processed", (state != 0) ? state->call_id : "", extra);
 }
 
-static void process_chat_turn(
+void process_chat_turn(
   cerebras_v3::State* state,
   const Config* config,
   const char* message,
@@ -2999,7 +2853,7 @@ static bool read_exact(int fd, unsigned char* output, int length)
   return true;
 }
 
-static bool websocket_read_text(int fd, char* output, int capacity, int* opcode)
+bool websocket_read_text(int fd, char* output, int capacity, int* opcode)
 {
   unsigned char header[2];
   unsigned char mask[4];
@@ -3135,7 +2989,7 @@ static void latest_user_from_retell_event(const char* event, char* output, int c
   }
 }
 
-static void build_retell_response_json(
+void build_retell_response_json(
   char* response,
   int capacity,
   int response_id,
@@ -3359,8 +3213,7 @@ static int create_server_socket(int port)
   }
   return fd;
 }
-}
-
+#ifndef VOXTEN_TEST_BUILD
 int main(int argument_count, char** argument_values, char** envp)
 {
   Config config;
@@ -3398,3 +3251,4 @@ int main(int argument_count, char** argument_values, char** envp)
   }
   return 0;
 }
+#endif
