@@ -270,6 +270,20 @@ static void cq12_final_close(void)
   expect_true(std::strstr(result.text, "call you back") != 0, "CQ-12 states callback ownership");
 }
 
+static void final_confirmation_asks_will_that_be_all(void)
+{
+  cerebras_v3::State state;
+  cerebras_v3::Interpretation interpretation;
+  cerebras_v3::Plan plan;
+  cerebras_v3::Response_context context;
+  cerebras_v3::Response_render_result result;
+  prepare(&state, &interpretation, &plan, &context, cerebras_v3::field_final_confirmed);
+  expect_true(render(&state, &context, "", &result), "final confirmation renders");
+  expect_true(question_count(result.text) == 1, "final confirmation asks one close question");
+  expect_true(std::strstr(result.text, "Will that be all?") != 0, "final confirmation asks will that be all");
+  expect_true(std::strstr(result.text, "call you back") != 0, "final confirmation keeps callback owner clear");
+}
+
 static void recent_history_changes_repeated_wording(void)
 {
   cerebras_v3::State state;
@@ -299,6 +313,7 @@ int main(void)
   cq10_callback_correction();
   cq11_phone_correction();
   cq12_final_close();
+  final_confirmation_asks_will_that_be_all();
   recent_history_changes_repeated_wording();
   if (failures == 0)
   {

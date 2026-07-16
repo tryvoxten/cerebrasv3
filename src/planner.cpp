@@ -1222,8 +1222,6 @@ static void merge_interpretation_fields(State* state, const Interpretation* inte
     {
       state->fields[field_phone_confirmed].status = status_captured;
       state->fields[field_phone_confirmed].confirmed = true;
-      state->fields[field_final_confirmed].status = status_captured;
-      state->fields[field_final_confirmed].confirmed = true;
     }
     else
     {

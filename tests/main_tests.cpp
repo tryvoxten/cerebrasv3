@@ -535,7 +535,7 @@ static void completed_intake_ends_retell_call(void)
     "completed intake sends Retell end_call true");
 }
 
-static void phone_confirmation_closes_without_final_reconfirmation(void)
+static void phone_confirmation_moves_to_final_close_check(void)
 {
   Config config;
   cerebras_v3::State state;
@@ -568,11 +568,50 @@ static void phone_confirmation_closes_without_final_reconfirmation(void)
 
   process_chat_turn(&state, &config, "Yep.", "I have 6472121234. Is that the correct callback number?", "", &result);
 
-  expect_true(result.end_call, "phone confirmation ends intake without final confirmation");
-  expect_true(std::strchr(result.response_text, '?') == 0, "phone confirmation close asks no extra question");
+  expect_true(!result.end_call, "phone confirmation does not end before final close check");
+  expect_true(std::strstr(result.response_text, "Will that be all?") != 0, "phone confirmation asks final close check");
   expect_true(
     std::strstr(result.response_text, "service team") != 0,
-    "phone confirmation close names handoff team");
+    "phone confirmation final check names handoff team");
+}
+
+static void final_close_check_yes_ends_call(void)
+{
+  Config config;
+  cerebras_v3::State state;
+  Turn_result result;
+  load_config(0, &config);
+  config.structured_responses = true;
+  config.ai_response_slots = false;
+  cerebras_v3::init_state(&state);
+  state.department = cerebras_v3::department_service;
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_department].value, "service", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_intent].value, "service request", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_caller_name].value, "Jordan Smith", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_last_name_spelling].value, "S M I T H", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_vehicle].value, "2012 Acura MDX", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_request].value, "weird noise", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_date].value, "July 8, 2026", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_callback_time].value, "3:00 PM", cerebras_v3::max_text);
+  cerebras_v3::copy_text(state.fields[cerebras_v3::field_phone].value, "6472121234", cerebras_v3::max_text);
+  state.fields[cerebras_v3::field_department].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_intent].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_caller_name].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_last_name_spelling].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_vehicle].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_request].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_date].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_phone].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_callback_time].confirmed = true;
+  state.fields[cerebras_v3::field_phone_confirmed].status = cerebras_v3::status_captured;
+  state.fields[cerebras_v3::field_phone_confirmed].confirmed = true;
+  state.last_requested = cerebras_v3::field_final_confirmed;
+
+  process_chat_turn(&state, &config, "Yes, that's all.", "Will that be all?", "", &result);
+
+  expect_true(result.end_call, "final close yes ends call");
+  expect_true(std::strchr(result.response_text, '?') == 0, "final close asks no extra question");
 }
 
 static void incomplete_phone_is_reasked_and_not_closed(void)
@@ -968,7 +1007,8 @@ int main(void)
   structured_opening_uses_after_hours_identity();
   structured_response_composes_without_ai();
   completed_intake_ends_retell_call();
-  phone_confirmation_closes_without_final_reconfirmation();
+  phone_confirmation_moves_to_final_close_check();
+  final_close_check_yes_ends_call();
   incomplete_phone_is_reasked_and_not_closed();
   rejected_phone_confirmation_forces_full_number_retry();
   phone_what_did_you_get_reasks_full_number();

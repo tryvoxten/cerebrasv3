@@ -48,8 +48,8 @@ static const Phrase_definition phrase_catalog[] =
   {302, response_act_ask, field_callback_time, department_unknown, phrase_variant_confirmation_question, 0, 9, "Did I get that right?"},
   {311, response_act_ask, field_phone_confirmed, department_unknown, phrase_variant_confirmation_question, 0, 9, "Is that the correct callback number?"},
   {312, response_act_ask, field_phone_confirmed, department_unknown, phrase_variant_confirmation_question, 0, 9, "Did I get that number right?"},
-  {321, response_act_ask, field_final_confirmed, department_unknown, phrase_variant_confirmation_question, 0, 9, "Do those details sound right?"},
-  {322, response_act_ask, field_final_confirmed, department_unknown, phrase_variant_confirmation_question, 0, 9, "Is everything correct?"},
+  {321, response_act_ask, field_final_confirmed, department_unknown, phrase_variant_confirmation_question, 0, 9, "Will that be all?"},
+  {322, response_act_ask, field_final_confirmed, department_unknown, phrase_variant_confirmation_question, 0, 9, "Will that be all?"},
 
   {401, response_act_acknowledge, field_none, department_unknown, phrase_variant_any, 0, 9, "I have {request} noted."},
   {402, response_act_acknowledge, field_none, department_unknown, phrase_variant_any, 0, 9, "I'll include {request} for the {department} team."},
@@ -78,7 +78,7 @@ static const Phrase_definition phrase_catalog[] =
 
   {801, response_act_readback, field_callback_time, department_unknown, phrase_variant_any, 0, 9, "Okay, {callback_slot}."},
   {811, response_act_readback, field_phone_confirmed, department_unknown, phrase_variant_any, 0, 9, "I have {phone}."},
-  {821, response_act_readback, field_final_confirmed, department_unknown, phrase_variant_any, 0, 9, "I have your request and callback details ready for the {department} team."},
+  {821, response_act_readback, field_final_confirmed, department_unknown, phrase_variant_any, 0, 9, "I'll pass this to the {department} team so they can call you back."},
 
   {901, response_act_answer, field_none, department_unknown, phrase_variant_any, 0, 9, "{kb_answer}"},
   {902, response_act_answer, field_none, department_unknown, phrase_variant_any, 0, 9, "The {department} team will call you back and can confirm that then."},

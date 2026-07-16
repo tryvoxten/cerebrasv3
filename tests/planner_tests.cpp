@@ -248,8 +248,8 @@ static void phone_confirmation_advances(void)
   cerebras_v3::clear_interpretation(&interpretation);
   cerebras_v3::merge_interpretation(&state, &interpretation, "yes that is correct");
   plan = cerebras_v3::plan_next(&state);
-  expect_true(state.fields[cerebras_v3::field_final_confirmed].confirmed, "phone confirmation marks final ready");
-  expect_true(plan.complete, "phone confirmation completes intake");
+  expect_true(!state.fields[cerebras_v3::field_final_confirmed].confirmed, "phone confirmation waits for final close check");
+  expect_true(plan.next_field == cerebras_v3::field_final_confirmed, "phone confirmation moves to final close check");
 }
 
 static void ai_affirmation_advances_phone_confirmation(void)
@@ -275,8 +275,8 @@ static void ai_affirmation_advances_phone_confirmation(void)
   cerebras_v3::copy_text(interpretation.affirmation, "yes", 32);
   cerebras_v3::merge_interpretation(&state, &interpretation, "that works");
   plan = cerebras_v3::plan_next(&state);
-  expect_true(state.fields[cerebras_v3::field_final_confirmed].confirmed, "ai yes marks final ready");
-  expect_true(plan.complete, "ai yes completes phone confirmation");
+  expect_true(!state.fields[cerebras_v3::field_final_confirmed].confirmed, "ai yes waits for final close check");
+  expect_true(plan.next_field == cerebras_v3::field_final_confirmed, "ai yes moves to final close check");
 }
 
 static void ai_rejection_reasks_phone(void)
@@ -327,8 +327,8 @@ static void kb_confirmation_phrases_advance(void)
   cerebras_v3::clear_interpretation(&interpretation);
   cerebras_v3::merge_interpretation(&state, &interpretation, "right");
   plan = cerebras_v3::plan_next(&state);
-  expect_true(state.fields[cerebras_v3::field_final_confirmed].confirmed, "right marks final ready");
-  expect_true(plan.complete, "right completes phone confirmation");
+  expect_true(!state.fields[cerebras_v3::field_final_confirmed].confirmed, "right waits for final close check");
+  expect_true(plan.next_field == cerebras_v3::field_final_confirmed, "right moves to final close check");
 
   cerebras_v3::init_state(&state);
   cerebras_v3::clear_interpretation(&interpretation);
@@ -347,8 +347,8 @@ static void kb_confirmation_phrases_advance(void)
   cerebras_v3::clear_interpretation(&interpretation);
   cerebras_v3::merge_interpretation(&state, &interpretation, "yep that is mine");
   plan = cerebras_v3::plan_next(&state);
-  expect_true(state.fields[cerebras_v3::field_final_confirmed].confirmed, "yep that is mine marks final ready");
-  expect_true(plan.complete, "yep that is mine completes phone confirmation");
+  expect_true(!state.fields[cerebras_v3::field_final_confirmed].confirmed, "yep that is mine waits for final close check");
+  expect_true(plan.next_field == cerebras_v3::field_final_confirmed, "yep that is mine moves to final close check");
 }
 
 static void confirmation_state_roundtrips(void)

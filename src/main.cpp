@@ -1,5 +1,6 @@
 #include <planner.h>
 #include <caller_number.h>
+#include <conversation_integrity.h>
 #include <generated_kb.h>
 #include <prompt_sections.h>
 #include <relative_callback_time.h>
@@ -971,6 +972,87 @@ static bool copy_phone_reply(const char* message, char* output, int capacity)
   return out >= 7;
 }
 
+static bool caller_text_looks_like_correction(const char* lowered)
+{
+  if (lowered == 0)
+  {
+    return false;
+  }
+  return
+    contains_text(lowered, "actually") ||
+    contains_text(lowered, "sorry") ||
+    contains_text(lowered, "i meant") ||
+    contains_text(lowered, "instead") ||
+    contains_text(lowered, "change that") ||
+    contains_text(lowered, "make that") ||
+    contains_text(lowered, "not ") ||
+    contains_text(lowered, "no,") ||
+    contains_text(lowered, "wrong");
+}
+
+static void apply_local_correction_type(
+  const cerebras_v3::State* state,
+  const char* message,
+  const char* lowered,
+  cerebras_v3::Interpretation* interpretation)
+{
+  if ((state == 0) ||
+      (interpretation == 0) ||
+      !caller_text_looks_like_correction(lowered) ||
+      (std::strcmp(interpretation->turn_type, "caller_question") == 0) ||
+      (std::strcmp(interpretation->turn_type, "customer_confusion") == 0) ||
+      (std::strcmp(interpretation->turn_type, "off_topic") == 0) ||
+      (std::strcmp(interpretation->turn_type, "unclear_audio") == 0))
+  {
+    return;
+  }
+  if (std::strcmp(interpretation->turn_type, "correction") != 0)
+  {
+    cerebras_v3::copy_text(interpretation->turn_type, "correction", 64);
+  }
+  if (interpretation->answered_field[0] == '\0')
+  {
+    if ((state->last_requested == cerebras_v3::field_last_name_spelling) ||
+        contains_text(lowered, "spell") ||
+        contains_text(lowered, "last name"))
+    {
+      cerebras_v3::copy_text(interpretation->answered_field, "last_name_spelling", 64);
+      if (interpretation->spelling[0] == '\0')
+      {
+        copy_spelling_reply(message, interpretation->spelling, cerebras_v3::max_text);
+      }
+    }
+    else if ((state->last_requested == cerebras_v3::field_phone) ||
+             (state->last_requested == cerebras_v3::field_phone_confirmed) ||
+             contains_text(lowered, "number") ||
+             (copy_phone_reply(message, interpretation->phone, cerebras_v3::max_text) &&
+              (interpretation->phone[0] != '\0')))
+    {
+      cerebras_v3::copy_text(interpretation->answered_field, "phone", 64);
+    }
+    else if ((state->last_requested == cerebras_v3::field_callback_date) ||
+             (state->last_requested == cerebras_v3::field_callback_time) ||
+             contains_text(lowered, "tomorrow") ||
+             contains_text(lowered, "monday") ||
+             contains_text(lowered, "tuesday") ||
+             contains_text(lowered, "wednesday") ||
+             contains_text(lowered, "thursday") ||
+             contains_text(lowered, "friday") ||
+             contains_text(lowered, " at "))
+    {
+      cerebras_v3::copy_text(interpretation->answered_field, "callback_time", 64);
+    }
+    else if (state->last_requested == cerebras_v3::field_vehicle)
+    {
+      cerebras_v3::copy_text(interpretation->answered_field, "vehicle", 64);
+    }
+    else if (state->last_requested == cerebras_v3::field_request)
+    {
+      cerebras_v3::copy_text(interpretation->answered_field, "request", 64);
+    }
+  }
+}
+
 static void apply_local_interpretation_fallback(
   const cerebras_v3::State* state,
   const char* message,
@@ -982,6 +1064,7 @@ static void apply_local_interpretation_fallback(
     return;
   }
   lowercase_text(lowered, message, text_capacity);
+  apply_local_correction_type(state, message, lowered, interpretation);
   if ((state != 0) &&
       (std::strcmp(interpretation->turn_type, "customer_confusion") != 0) &&
       (std::strcmp(interpretation->turn_type, "caller_question") != 0) &&
@@ -1726,49 +1809,6 @@ static void append_callback_datetime_clean(const cerebras_v3::State* state, char
   append_capped_words(output, capacity, combined, 10);
 }
 
-static void append_final_confirmation(const cerebras_v3::State* state, char* output, int capacity)
-{
-  append_text(output, capacity, "I have you down for ");
-  if (state == 0)
-  {
-    append_text(output, capacity, "the request. Is that correct?");
-    return;
-  }
-  if (state->department == cerebras_v3::department_service)
-  {
-    append_text(output, capacity, "a service request");
-  }
-  else if (state->department == cerebras_v3::department_parts)
-  {
-    append_text(output, capacity, "a parts request");
-  }
-  else if (state->department == cerebras_v3::department_sales)
-  {
-    append_text(output, capacity, "a sales request");
-  }
-  else
-  {
-    append_text(output, capacity, "a request");
-  }
-  if (state->fields[cerebras_v3::field_request].value[0] != '\0')
-  {
-    append_text(output, capacity, " about ");
-    append_clean_field(output, capacity, state->fields[cerebras_v3::field_request].value);
-  }
-  if ((state->fields[cerebras_v3::field_callback_date].value[0] != '\0') ||
-      (state->fields[cerebras_v3::field_callback_time].value[0] != '\0'))
-  {
-    append_text(output, capacity, " for ");
-    append_callback_datetime_clean(state, output, capacity);
-  }
-  if (state->fields[cerebras_v3::field_vehicle].value[0] != '\0')
-  {
-    append_text(output, capacity, " with your ");
-    append_clean_field(output, capacity, state->fields[cerebras_v3::field_vehicle].value);
-  }
-  append_text(output, capacity, ". Is that correct?");
-}
-
 static bool template_response(const cerebras_v3::State* state, const cerebras_v3::Plan* plan, char* output, int capacity)
 {
   clear_buffer(output, capacity);
@@ -1843,7 +1883,10 @@ static bool template_response(const cerebras_v3::State* state, const cerebras_v3
       append_text(output, capacity, ". Is that correct?");
       return true;
     case cerebras_v3::field_final_confirmed:
-      append_final_confirmation(state, output, capacity);
+      append_text(output, capacity, "I'll pass this to the ");
+      append_text(output, capacity, cerebras_v3::department_name(
+        (state != 0) ? state->department : cerebras_v3::department_unknown));
+      append_text(output, capacity, " team so they can call you back. Will that be all?");
       return true;
     case cerebras_v3::field_none:
       cerebras_v3::copy_text(output, "Perfect, I'll pass this to the team so they can call you back.", capacity);
@@ -1910,10 +1953,82 @@ static bool append_collected_details_readback(const cerebras_v3::State* state, c
   return wrote_detail;
 }
 
+static void append_transitioned_question(char* output, int capacity, const char* question)
+{
+  char adjusted[text_capacity];
+  if ((output == 0) || (question == 0) || (question[0] == '\0'))
+  {
+    return;
+  }
+  clear_buffer(adjusted, text_capacity);
+  cerebras_v3::copy_text(adjusted, question, text_capacity);
+  if (std::strncmp(adjusted, "What", 4U) == 0)
+  {
+    adjusted[0] = 'w';
+  }
+  else if (std::strncmp(adjusted, "Which", 5U) == 0)
+  {
+    adjusted[0] = 'w';
+  }
+  append_text(output, capacity, " For the follow-up, ");
+  append_text(output, capacity, adjusted);
+}
+
+static const char* missed_answer_field_name(cerebras_v3::Field_id field)
+{
+  switch (field)
+  {
+    case cerebras_v3::field_department: return "the team";
+    case cerebras_v3::field_caller_name: return "your full name";
+    case cerebras_v3::field_last_name_spelling: return "the spelling";
+    case cerebras_v3::field_vehicle: return "the vehicle";
+    case cerebras_v3::field_request: return "the request";
+    case cerebras_v3::field_callback_date: return "the callback date";
+    case cerebras_v3::field_callback_time: return "the callback time";
+    case cerebras_v3::field_phone: return "the callback number";
+    default: break;
+  }
+  return "that";
+}
+
+static bool build_missed_answer_response(
+  const cerebras_v3::State* state,
+  const cerebras_v3::Plan* plan,
+  cerebras_v3::Field_id previous_requested,
+  const cerebras_v3::Interpretation* interpretation,
+  const char* message,
+  char* output,
+  int capacity)
+{
+  char question[text_capacity];
+  if ((plan == 0) || (output == 0) || (capacity <= 0))
+  {
+    return false;
+  }
+  if ((previous_requested == cerebras_v3::field_none) ||
+      (previous_requested != plan->next_field) ||
+      !cerebras_v3::should_repair_missed_answer(state, previous_requested, interpretation, message))
+  {
+    return false;
+  }
+  clear_buffer(question, text_capacity);
+  if (!template_response(state, plan, question, text_capacity))
+  {
+    return false;
+  }
+  clear_buffer(output, capacity);
+  append_text(output, capacity, "Sorry, I did not get ");
+  append_text(output, capacity, missed_answer_field_name(previous_requested));
+  append_text(output, capacity, ". ");
+  append_text(output, capacity, question);
+  return true;
+}
+
 static bool build_interruption_response(
   const cerebras_v3::State* state,
   const cerebras_v3::Plan* plan,
   const cerebras_v3::Interpretation* interpretation,
+  const char* message,
   char* output,
   int capacity)
 {
@@ -1990,8 +2105,14 @@ static bool build_interruption_response(
         capacity,
         " team will call you back and can confirm that then.");
     }
-    append_text(output, capacity, " ");
-    append_text(output, capacity, question);
+    if (cerebras_v3::caller_turn_has_multiple_questions(message))
+    {
+      append_text(output, capacity, " What was the other thing you wanted to ask?");
+    }
+    else
+    {
+      append_transitioned_question(output, capacity, question);
+    }
     return true;
   }
   if (std::strcmp(interpretation->turn_type, "off_topic") == 0)
@@ -2225,6 +2346,7 @@ void clear_turn_result(Turn_result* result)
   clear_buffer(result->answered_field, 64);
   clear_buffer(result->faq_id, 64);
   clear_buffer(result->affirmation, 32);
+  clear_buffer(result->integrity_issues, 256);
   result->used_interpreter = false;
   result->used_generator = false;
   result->used_kb_answer = false;
@@ -2326,6 +2448,7 @@ static void log_turn_processed(
   append_json_string_field(extra, 1024, "turn_type", (result != 0) ? result->turn_type : "");
   append_json_string_field(extra, 1024, "answered_field", (result != 0) ? result->answered_field : "");
   append_json_string_field(extra, 1024, "faq_id", (result != 0) ? result->faq_id : "");
+  append_json_string_field(extra, 1024, "integrity_issues", (result != 0) ? result->integrity_issues : "");
   append_json_bool_field(extra, 1024, "message_present", (message != 0) && (message[0] != '\0'));
   append_json_int_field(extra, 1024, "message_chars", (message != 0) ? static_cast<long>(std::strlen(message)) : 0L);
   append_json_bool_field(extra, 1024, "used_interpreter", (result != 0) && result->used_interpreter);
@@ -2335,6 +2458,17 @@ static void log_turn_processed(
   append_json_bool_field(extra, 1024, "delivery_sent", ((state != 0) && state->delivery_sent) || ((result != 0) && result->delivery_sent));
   append_json_bool_field(extra, 1024, "has_employee_summary", (result != 0) && (result->employee_summary[0] != '\0'));
   log_json_line("turn_processed", (state != 0) ? state->call_id : "", extra);
+  if ((result != 0) && (result->integrity_issues[0] != '\0'))
+  {
+    char integrity_extra[1024];
+    clear_buffer(integrity_extra, 1024);
+    append_json_string_field(integrity_extra, 1024, "source", source);
+    append_json_string_field(integrity_extra, 1024, "issues", result->integrity_issues);
+    append_json_string_field(integrity_extra, 1024, "next_field", result->next_field);
+    append_json_string_field(integrity_extra, 1024, "turn_type", result->turn_type);
+    append_json_string_field(integrity_extra, 1024, "answered_field", result->answered_field);
+    log_json_line("conversation_integrity", (state != 0) ? state->call_id : "", integrity_extra);
+  }
 }
 
 void process_chat_turn(
@@ -2432,6 +2566,17 @@ void process_chat_turn(
   }
   if (result->response_text[0] == '\0')
   {
+    (void)build_missed_answer_response(
+      state,
+      &plan,
+      previous_requested,
+      &interpretation,
+      message,
+      result->response_text,
+      text_capacity);
+  }
+  if (result->response_text[0] == '\0')
+  {
     (void)try_structured_response(
       state,
       config,
@@ -2443,7 +2588,7 @@ void process_chat_turn(
   }
   if (result->response_text[0] == '\0')
   {
-    (void)build_interruption_response(state, &plan, &interpretation, result->response_text, text_capacity);
+    (void)build_interruption_response(state, &plan, &interpretation, message, result->response_text, text_capacity);
   }
   if (result->response_text[0] == '\0')
   {
@@ -2460,10 +2605,13 @@ void process_chat_turn(
       clear_buffer(question, text_capacity);
       result->used_kb_answer = true;
       append_text(result->response_text, text_capacity, faq_answer);
-      if ((plan.next_field != cerebras_v3::field_none) && template_response(state, &plan, question, text_capacity))
+      if (cerebras_v3::caller_turn_has_multiple_questions(message))
       {
-        append_text(result->response_text, text_capacity, " ");
-        append_text(result->response_text, text_capacity, question);
+        append_text(result->response_text, text_capacity, " What was the other thing you wanted to ask?");
+      }
+      else if ((plan.next_field != cerebras_v3::field_none) && template_response(state, &plan, question, text_capacity))
+      {
+        append_transitioned_question(result->response_text, text_capacity, question);
       }
     }
   }
@@ -2512,6 +2660,16 @@ void process_chat_turn(
   cerebras_v3::copy_text(result->answered_field, interpretation.answered_field, 64);
   cerebras_v3::copy_text(result->faq_id, interpretation.faq_id, 64);
   cerebras_v3::copy_text(result->affirmation, interpretation.affirmation, 32);
+  cerebras_v3::conversation_integrity_issues(
+    state,
+    previous_requested,
+    &interpretation,
+    &plan,
+    message,
+    result->response_text,
+    result->end_call,
+    result->integrity_issues,
+    256);
 }
 
 static void http_json(int fd, int status, const char* body)
@@ -2599,6 +2757,8 @@ static void handle_test_chat(int fd, const char* request, const Config* config)
   json_escape_append(body, response_capacity, result.turn_type);
   append_text(body, response_capacity, "\",\"answered_field\":\"");
   json_escape_append(body, response_capacity, result.answered_field);
+  append_text(body, response_capacity, "\",\"integrity_issues\":\"");
+  json_escape_append(body, response_capacity, result.integrity_issues);
   append_text(body, response_capacity, "\",\"content\":\"");
   json_escape_append(body, response_capacity, result.response_text);
   append_text(body, response_capacity, "\",\"state\":");

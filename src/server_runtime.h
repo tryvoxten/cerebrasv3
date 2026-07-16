@@ -38,6 +38,7 @@ struct Turn_result
   char answered_field[64];
   char faq_id[64];
   char affirmation[32];
+  char integrity_issues[256];
   bool used_interpreter;
   bool used_generator;
   bool used_kb_answer;
