@@ -1,0 +1,4 @@
+Caller: Do you have loaner vehicles?
+Agent: Here are the loaner vehicle details:
+- Loaners may be available during longer repairs.
+- The service team can confirm when they call back.

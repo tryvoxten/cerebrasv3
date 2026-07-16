@@ -1,0 +1,16 @@
+[
+  {
+    "role": "assistant",
+    "content": "I'll pass this to the service team so they can call you back. Will that be all?",
+    "end_call": false
+  },
+  {
+    "role": "caller",
+    "content": "Yep, that's all."
+  },
+  {
+    "role": "assistant",
+    "content": "What day and time works best for a callback?",
+    "end_call": false
+  }
+]

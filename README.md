@@ -113,6 +113,36 @@ Turn it back off after testing because it can log raw model/interpreter details:
 flyctl secrets unset CEREBRAS_DEBUG --app voxten-cerebras-v3
 ```
 
+## Post-call transcript analysis
+
+Use the transcript analyzer to check exported Retell transcripts or hand-written
+fixtures for conversation-quality failures:
+
+```bash
+node scripts/transcript_analysis.mjs tests/fixtures/transcripts/*
+```
+
+Supported input formats:
+
+- `.txt` files with `Caller:` and `Agent:` lines
+- `.json` arrays of turns with `role` plus `text`, `content`, or `message`
+- Retell-style objects with `transcript`, `messages`, `turns`, or
+  `transcript_with_tool_calls`
+
+Current checks flag:
+
+- final close acceptance without `end_call: true`
+- intake restarting after the caller says the call is complete
+- duplicate callback date readbacks
+- unresolved relative callback date/time phrases
+- robotic/list-like KB answers
+- multi-question assistant responses
+- likely unrecovered multi-question caller turns
+
+The analyzer is intentionally evidence-oriented. It does not change runtime
+behavior; it produces a report so a live transcript can be converted into a
+specific regression test and tracker row.
+
 ## n8n Employee Email Delivery
 
 The app connects to n8n with a regular HTTPS webhook. No websocket is required.

@@ -64,6 +64,7 @@ quick-check: build/main_tests build/planner_tests build/conversation_tests build
 
 check-tools:
 	node tests/pilot_acceptance_config_tests.mjs
+	node tests/transcript_analysis_tests.mjs
 
 check: check-cpp check-tools
 
