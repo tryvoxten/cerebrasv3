@@ -2,6 +2,8 @@
 #include <relative_callback_time.h>
 #include <server_runtime.h>
 #include <vector>
+#include <cstdio>
+#include <cstring>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
